@@ -1,0 +1,39 @@
+# --- CMake / C++ build outputs ---
+/build/
+/backend-cpp/build/
+**/CMakeFiles/
+**/CMakeCache.txt
+**/cmake_install.cmake
+**/Makefile
+**/*.dir/
+**/*.obj
+**/*.o
+**/*.a
+**/*.dll
+**/*.dll.a
+**/*.exe
+
+# FetchContent / ExternalProject deps (generated in build trees)
+**/_deps/
+
+# Ninja
+**/.ninja_deps
+**/.ninja_log
+**/build.ninja
+**/rules.ninja
+
+# Compilation database
+**/compile_commands.json
+
+# Editor/Tooling caches
+/.cache/
+**/.cache/
+**/.clangd/
+**/.clang-tidy
+**/.clang-format
+**/.vscode/
+**/.idea/
+
+# OS junk
+.DS_Store
+Thumbs.db

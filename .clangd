@@ -1,0 +1,4 @@
+CompileFlags:
+  CompilationDatabase: backend-cpp/build
+  Add: [-Ibackend-cpp/include, --gcc-toolchain=E:/jzc/msys/ucrt64]
+

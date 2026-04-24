@@ -246,7 +246,7 @@ const key = ref<number>(1)
 const opResult = ref<string>('-')
 
 const initForm = ref({
-  n: 100000,
+  n: 10000,
   k: 2,
   load_factor: 0.98,
 })
@@ -647,7 +647,14 @@ function renderKickHist(hist: Array<{ depth: number; count: number }>) {
     tooltip: { trigger: 'axis' },
     xAxis: { type: 'category', data: hist.map((h) => String(h.depth)) },
     yAxis: { type: 'value' },
-    series: [{ type: 'bar', data: hist.map((h) => h.count), itemStyle: { color: '#111827' } }],
+    series: [
+      {
+        type: 'bar',
+        data: hist.map((h) => h.count),
+        barMaxWidth: 20,
+        itemStyle: { color: '#2563eb', borderRadius: [3, 3, 0, 0] },
+      },
+    ],
   })
 }
 
@@ -881,7 +888,7 @@ watch(canvasEl, () => renderCanvas())
 }
 .layout {
   display: grid;
-  grid-template-columns: 420px 1fr;
+  grid-template-columns: 450px 1fr;
   gap: 14px;
   align-items: start;
 }

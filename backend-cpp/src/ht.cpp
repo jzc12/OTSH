@@ -1,29 +1,33 @@
 #include "ht.h"
 
-#include <chrono>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <stdexcept>
 
 namespace otsh {
 
-HashTableDb::HashTableDb(Db& db) : db_(db) {}
+HashTableDb::HashTableDb(Db &db) : db_(db) {}
 
 void HashTableDb::reset_kick_hist(int k) {
-  // allocate 0..k plus one extra bucket for "fallback marker" depth==k+1
+  // 分配 0..k 加上一个额外的桶，用于 "fallback marker" depth==k+1
   size_t n = static_cast<size_t>(std::max(0, k) + 2);
   kick_hist_ = std::make_unique<std::atomic<uint64_t>[]>(n);
   kick_hist_size_ = n;
-  for (size_t i = 0; i < n; i++) kick_hist_[i].store(0, std::memory_order_relaxed);
+  for (size_t i = 0; i < n; i++)
+    kick_hist_[i].store(0, std::memory_order_relaxed);
 }
 
+// 获取踢出历史快照
 std::vector<uint64_t> HashTableDb::kick_hist_snapshot() const {
   std::vector<uint64_t> out;
   out.reserve(kick_hist_size_);
-  for (size_t i = 0; i < kick_hist_size_; i++) out.push_back(kick_hist_[i].load(std::memory_order_relaxed));
+  for (size_t i = 0; i < kick_hist_size_; i++)
+    out.push_back(kick_hist_[i].load(std::memory_order_relaxed));
   return out;
 }
 
+// 计算迭代对数
 uint64_t HashTableDb::ilog_iter(uint64_t n, int iter) {
   double x = static_cast<double>(n);
   for (int i = 0; i < iter; i++) {
@@ -32,23 +36,26 @@ uint64_t HashTableDb::ilog_iter(uint64_t n, int iter) {
   return static_cast<uint64_t>(std::ceil(std::max(2.0, x)));
 }
 
-void HashTableDb::derive_sizes(TableParams& p) {
-  // Per design doc: mini_bin_size = O(log^(k) n), num_mini_bins = O(log^(k) n)
-  // For small n / deep k, clamp to keep bins non-trivial and DB friendly.
+void HashTableDb::derive_sizes(TableParams &p) {
+  // 根据设计文档：mini_bin_size = O(log^(k) n), num_mini_bins = O(log^(k) n)
+  // 对于小 n / 深 k，clamp 以保持 bins 非平凡且 DB 友好。
   uint64_t base = ilog_iter(p.n, std::max(1, p.k));
   p.mini_bin_size = std::min<uint64_t>(64, std::max<uint64_t>(4, base));
   p.num_mini_bins = std::min<uint64_t>(64, std::max<uint64_t>(4, base));
 
   p.bin_size = p.mini_bin_size * p.num_mini_bins + p.fallback_size;
 
-  // capacity ~ n / load_factor
-  uint64_t target_capacity = static_cast<uint64_t>(std::ceil(static_cast<double>(p.n) / std::max(0.01, p.load_factor)));
-  p.total_bins = static_cast<uint64_t>(std::ceil(static_cast<double>(target_capacity) / static_cast<double>(p.bin_size)));
+  // 容量 ~ n / load_factor
+  uint64_t target_capacity = static_cast<uint64_t>(
+      std::ceil(static_cast<double>(p.n) / std::max(0.01, p.load_factor)));
+  p.total_bins = static_cast<uint64_t>(std::ceil(
+      static_cast<double>(target_capacity) / static_cast<double>(p.bin_size)));
   p.total_bins = std::max<uint64_t>(1, p.total_bins);
   p.capacity_slots = p.total_bins * p.bin_size;
 }
 
-HashFunc HashTableDb::make_hash(const TableParams& p) const {
+// 创建哈希函数
+HashFunc HashTableDb::make_hash(const TableParams &p) const {
   HashFunc hf;
   hf.seed1 = p.seed1;
   hf.seed2 = p.seed2;
@@ -56,58 +63,96 @@ HashFunc HashTableDb::make_hash(const TableParams& p) const {
   return hf;
 }
 
-uint64_t HashTableDb::bin_offset(const TableParams& p, uint64_t b) const { return b * p.bin_size; }
+// 计算 bin 偏移
+uint64_t HashTableDb::bin_offset(const TableParams &p, uint64_t b) const {
+  return b * p.bin_size;
+}
 
-uint64_t HashTableDb::mini_range_start(const TableParams& p, uint64_t b, uint64_t m) const {
+// 计算 mini-bin 范围起始
+uint64_t HashTableDb::mini_range_start(const TableParams &p, uint64_t b,
+                                       uint64_t m) const {
   return bin_offset(p, b) + m * p.mini_bin_size;
 }
 
-uint64_t HashTableDb::mini_range_end(const TableParams& p, uint64_t b, uint64_t m) const {
+// 计算 mini-bin 范围结束
+uint64_t HashTableDb::mini_range_end(const TableParams &p, uint64_t b,
+                                     uint64_t m) const {
   return mini_range_start(p, b, m) + p.mini_bin_size - 1;
 }
 
-uint64_t HashTableDb::fallback_start(const TableParams& p, uint64_t b) const {
+// 计算 fallback 范围起始
+uint64_t HashTableDb::fallback_start(const TableParams &p, uint64_t b) const {
   return bin_offset(p, b) + p.mini_bin_size * p.num_mini_bins;
 }
 
-uint64_t HashTableDb::fallback_end(const TableParams& p, uint64_t b) const {
+// 计算 fallback 范围结束
+uint64_t HashTableDb::fallback_end(const TableParams &p, uint64_t b) const {
   return fallback_start(p, b) + p.fallback_size - 1;
 }
 
-std::optional<uint64_t> HashTableDb::claim_empty_slot_in_range(const std::string& table, uint64_t start, uint64_t end,
-                                                               uint64_t* probes) {
-  if (probes) (*probes)++; // one range scan on a contiguous idx interval
-  return db_.select_one_u64("SELECT idx FROM " + table + " WHERE idx BETWEEN " + std::to_string(start) + " AND " +
-                            std::to_string(end) + " AND fp=0 AND `key` IS NULL LIMIT 1 FOR UPDATE");
+// 在范围内查找空槽
+std::optional<uint64_t>
+HashTableDb::claim_empty_slot_in_range(const std::string &table, uint64_t start,
+                                       uint64_t end, uint64_t *probes) {
+  if (probes)
+    (*probes)++; // 在一个连续的 idx 区间上进行一次范围扫描
+  return db_.select_one_u64("SELECT idx FROM " + table + " WHERE idx BETWEEN " +
+                            std::to_string(start) + " AND " +
+                            std::to_string(end) +
+                            " AND fp=0 AND `key` IS NULL LIMIT 1 FOR UPDATE");
 }
 
-bool HashTableDb::insert_into_fallback(const std::string& table, const TableParams& p, uint64_t key, uint16_t fp, uint64_t b,
-                                       std::vector<KickStep>* trace, uint64_t* probes) {
+// 插入到 fallback 区域
+bool HashTableDb::insert_into_fallback(const std::string &table,
+                                       const TableParams &p, uint64_t key,
+                                       uint16_t fp, uint64_t b,
+                                       std::vector<KickStep> *trace,
+                                       uint64_t *probes) {
   auto start = fallback_start(p, b);
   auto end = fallback_end(p, b);
   auto idxOpt = claim_empty_slot_in_range(table, start, end, probes);
-  if (!idxOpt) return false;
+  if (!idxOpt)
+    return false;
   db_.update_slot(table, *idxOpt, key, fp);
   if (trace) {
-    trace->push_back(KickStep{.idx = *idxOpt, .from_fp = 0, .to_fp = fp, .depth = static_cast<int>(p.k + 1), .action = "fallback_add"});
+    trace->push_back(KickStep{.idx = *idxOpt,
+                              .from_fp = 0,
+                              .to_fp = fp,
+                              .depth = static_cast<int>(p.k + 1),
+                              .action = "fallback_add"});
   }
   return true;
 }
 
-void HashTableDb::erase_from_fallback_if_present(const TableParams& p, uint64_t key, uint16_t fp, uint64_t b,
-                                                 std::vector<KickStep>* trace) {
+// 从 fallback 区域删除
+void HashTableDb::erase_from_fallback_if_present(const TableParams &p,
+                                                 uint64_t key, uint16_t fp,
+                                                 uint64_t b,
+                                                 std::vector<KickStep> *trace) {
   auto idxOpt = db_.select_idx_for_key_for_update(key);
-  if (!idxOpt) return;
+  if (!idxOpt)
+    return;
   uint64_t start = fallback_start(p, b);
   uint64_t end = fallback_end(p, b);
-  if (*idxOpt < start || *idxOpt > end) return;
+  if (*idxOpt < start || *idxOpt > end)
+    return;
   db_.update_slot(*idxOpt, std::nullopt, 0);
-  if (trace) trace->push_back(KickStep{.idx = *idxOpt, .from_fp = fp, .to_fp = 0, .depth = 0, .action = "fallback_remove"});
+  if (trace)
+    trace->push_back(KickStep{.idx = *idxOpt,
+                              .from_fp = fp,
+                              .to_fp = 0,
+                              .depth = 0,
+                              .action = "fallback_remove"});
 }
 
-bool HashTableDb::insert_with_kick(const std::string& table, const TableParams& p, const HashFunc& hf, uint64_t key, uint16_t fp,
-                                  uint64_t depth, std::vector<KickStep>* trace, uint64_t* probes) {
-  if (depth > static_cast<uint64_t>(p.k)) return false;
+// 插入并踢出
+bool HashTableDb::insert_with_kick(const std::string &table,
+                                   const TableParams &p, const HashFunc &hf,
+                                   uint64_t key, uint16_t fp, uint64_t depth,
+                                   std::vector<KickStep> *trace,
+                                   uint64_t *probes) {
+  if (depth > static_cast<uint64_t>(p.k))
+    return false;
 
   uint64_t b = hf.h_bin(key, p.total_bins);
   uint64_t m = hf.h_pref(key, p.num_mini_bins);
@@ -115,17 +160,23 @@ bool HashTableDb::insert_with_kick(const std::string& table, const TableParams& 
   uint64_t start = mini_range_start(p, b, m);
   uint64_t end = mini_range_end(p, b, m);
 
-  // empty slot
+  // 空槽
   auto idxOpt = claim_empty_slot_in_range(table, start, end, probes);
   if (idxOpt) {
     erase_from_fallback_if_present(p, key, fp, b, trace);
     db_.update_slot(table, *idxOpt, key, fp);
-    if (kick_hist_ && depth < kick_hist_size_) kick_hist_[depth].fetch_add(1, std::memory_order_relaxed);
-    if (trace) trace->push_back(KickStep{.idx = *idxOpt, .from_fp = 0, .to_fp = fp, .depth = static_cast<int>(depth), .action = "place"});
+    if (kick_hist_ && depth < kick_hist_size_)
+      kick_hist_[depth].fetch_add(1, std::memory_order_relaxed);
+    if (trace)
+      trace->push_back(KickStep{.idx = *idxOpt,
+                                .from_fp = 0,
+                                .to_fp = fp,
+                                .depth = static_cast<int>(depth),
+                                .action = "place"});
     return true;
   }
 
-  // kick: choose a slot deterministically (DB-friendly, avoids ORDER BY RAND())
+  // 踢出: 选择一个槽确定性地 (DB-friendly, 避免 ORDER BY RAND() 的随机性)
   uint64_t slot = hf.kick_slot(fp, depth, p.mini_bin_size);
   uint64_t idx = start + slot;
 
@@ -133,35 +184,55 @@ bool HashTableDb::insert_with_kick(const std::string& table, const TableParams& 
   if (!cur || cur->fp == 0) {
     erase_from_fallback_if_present(p, key, fp, b, trace);
     db_.update_slot(table, idx, key, fp);
-    if (kick_hist_ && depth < kick_hist_size_) kick_hist_[depth].fetch_add(1, std::memory_order_relaxed);
-    if (trace) trace->push_back(KickStep{.idx = idx, .from_fp = 0, .to_fp = fp, .depth = static_cast<int>(depth), .action = "place"});
+    if (kick_hist_ && depth < kick_hist_size_)
+      kick_hist_[depth].fetch_add(1, std::memory_order_relaxed);
+    if (trace)
+      trace->push_back(KickStep{.idx = idx,
+                                .from_fp = 0,
+                                .to_fp = fp,
+                                .depth = static_cast<int>(depth),
+                                .action = "place"});
     return true;
   }
 
   uint16_t evicted = cur->fp;
-  if (!cur->key.has_value()) throw std::runtime_error("invariant violated: occupied slot missing key");
+  if (!cur->key.has_value())
+    throw std::runtime_error("invariant violated: occupied slot missing key");
   uint64_t evicted_key = *cur->key;
 
   erase_from_fallback_if_present(p, key, fp, b, trace);
   db_.update_slot(table, idx, key, fp);
-  if (kick_hist_ && depth < kick_hist_size_) kick_hist_[depth].fetch_add(1, std::memory_order_relaxed);
-  if (trace) trace->push_back(KickStep{.idx = idx, .from_fp = evicted, .to_fp = fp, .depth = static_cast<int>(depth), .action = "kick"});
+  if (kick_hist_ && depth < kick_hist_size_)
+    kick_hist_[depth].fetch_add(1, std::memory_order_relaxed);
+  if (trace)
+    trace->push_back(KickStep{.idx = idx,
+                              .from_fp = evicted,
+                              .to_fp = fp,
+                              .depth = static_cast<int>(depth),
+                              .action = "kick"});
 
-  // evicted goes to fallback first (as per design doc), then recurse
+  // 被踢出的元素首先插入到 fallback 区域 然后递归
   uint64_t ev_b = hf.h_bin(evicted_key, p.total_bins);
-  if (!insert_into_fallback(table, p, evicted_key, evicted, ev_b, trace, probes)) {
-    // Can't safely proceed: we'd lose the evicted element (and violate persistence).
+  if (!insert_into_fallback(table, p, evicted_key, evicted, ev_b, trace,
+                            probes)) {
+    // 不能安全继续: 我们会丢失被踢出的元素 违反持久性.
     return false;
   }
 
-  bool ok = insert_with_kick(table, p, hf, evicted_key, evicted, depth + 1, trace, probes);
+  // 递归插入
+  bool ok = insert_with_kick(table, p, hf, evicted_key, evicted, depth + 1,
+                             trace, probes);
   if (ok) {
+    // 从 fallback 区域删除
     erase_from_fallback_if_present(p, evicted_key, evicted, ev_b, trace);
   }
   return ok;
 }
 
-InsertResult HashTableDb::insert_key_into_table(const std::string& table, const TableParams& p, uint64_t key, bool with_trace) {
+// 插入到表中
+InsertResult HashTableDb::insert_key_into_table(const std::string &table,
+                                                const TableParams &p,
+                                                uint64_t key, bool with_trace) {
   InsertResult r;
   try {
     auto hf = make_hash(p);
@@ -179,14 +250,16 @@ InsertResult HashTableDb::insert_key_into_table(const std::string& table, const 
       return r;
     }
 
-    bool ok = insert_with_kick(table, p, hf, key, fp, 0, with_trace ? &r.trace : nullptr, &r.probes);
+    bool ok = insert_with_kick(table, p, hf, key, fp, 0,
+                               with_trace ? &r.trace : nullptr, &r.probes);
     if (ok) {
       db_.commit();
       r.ok = true;
       return r;
     }
 
-    bool fb_ok = insert_into_fallback(table, p, key, fp, b, with_trace ? &r.trace : nullptr, &r.probes);
+    bool fb_ok = insert_into_fallback(
+        table, p, key, fp, b, with_trace ? &r.trace : nullptr, &r.probes);
     db_.commit();
     if (fb_ok) {
       r.ok = true;
@@ -197,39 +270,64 @@ InsertResult HashTableDb::insert_key_into_table(const std::string& table, const 
     r.ok = false;
     r.error = "fallback_full_or_insert_failed";
     return r;
-  } catch (const std::exception& e) {
-    try { db_.rollback(); } catch (...) {}
+  } catch (const std::exception &e) {
+    try {
+      db_.rollback();
+    } catch (...) {
+    }
     r.ok = false;
     r.error = e.what();
     return r;
   }
 }
 
-TableParams HashTableDb::load_or_init_meta(uint64_t n, int k, double load_factor, std::optional<uint64_t> seed1,
-                                          std::optional<uint64_t> seed2, std::optional<uint64_t> seed3) {
-  db_.exec(
-      "CREATE TABLE IF NOT EXISTS ht_meta ("
-      " id INT PRIMARY KEY,"
-      " n BIGINT NOT NULL,"
-      " k INT NOT NULL,"
-      " load_factor DOUBLE NOT NULL,"
-      " seed1 BIGINT UNSIGNED NOT NULL,"
-      " seed2 BIGINT UNSIGNED NOT NULL,"
-      " seed3 BIGINT UNSIGNED NOT NULL,"
-      " total_bins BIGINT NOT NULL,"
-      " is_resizing TINYINT NOT NULL DEFAULT 0,"
-      " new_total_bins BIGINT NOT NULL DEFAULT 0,"
-      " resize_progress BIGINT NOT NULL DEFAULT 0"
-      ")");
+// 加载或初始化元数据
+TableParams HashTableDb::load_or_init_meta(uint64_t n, int k,
+                                           double load_factor,
+                                           std::optional<uint64_t> seed1,
+                                           std::optional<uint64_t> seed2,
+                                           std::optional<uint64_t> seed3) {
+  db_.exec("CREATE TABLE IF NOT EXISTS ht_meta ("
+           " id INT PRIMARY KEY,"
+           " n BIGINT NOT NULL,"
+           " k INT NOT NULL,"
+           " load_factor DOUBLE NOT NULL,"
+           " seed1 BIGINT UNSIGNED NOT NULL,"
+           " seed2 BIGINT UNSIGNED NOT NULL,"
+           " seed3 BIGINT UNSIGNED NOT NULL,"
+           " total_bins BIGINT NOT NULL,"
+           " is_resizing TINYINT NOT NULL DEFAULT 0,"
+           " new_total_bins BIGINT NOT NULL DEFAULT 0,"
+           " resize_progress BIGINT NOT NULL DEFAULT 0"
+           ")");
 
-  // Best-effort schema migration for existing ht_meta created by older versions.
-  // MySQL/MariaDB might reject ADD COLUMN if it already exists; ignore those errors.
-  try { db_.exec("ALTER TABLE ht_meta ADD COLUMN total_bins BIGINT NOT NULL DEFAULT 0"); } catch (...) {}
-  try { db_.exec("ALTER TABLE ht_meta ADD COLUMN is_resizing TINYINT NOT NULL DEFAULT 0"); } catch (...) {}
-  try { db_.exec("ALTER TABLE ht_meta ADD COLUMN new_total_bins BIGINT NOT NULL DEFAULT 0"); } catch (...) {}
-  try { db_.exec("ALTER TABLE ht_meta ADD COLUMN resize_progress BIGINT NOT NULL DEFAULT 0"); } catch (...) {}
+  // 最佳努力模式迁移现有的 ht_meta 由旧版本创建。MySQL/MariaDB 可能会拒绝 ADD COLUMN
+  // 如果它已经存在; 忽略那些错误。
+  try {
+    db_.exec(
+        "ALTER TABLE ht_meta ADD COLUMN total_bins BIGINT NOT NULL DEFAULT 0");
+  } catch (...) {
+  }
+  try {
+    db_.exec("ALTER TABLE ht_meta ADD COLUMN is_resizing TINYINT NOT NULL "
+             "DEFAULT 0");
+  } catch (...) {
+  }
+  try {
+    db_.exec("ALTER TABLE ht_meta ADD COLUMN new_total_bins BIGINT NOT NULL "
+             "DEFAULT 0");
+  } catch (...) {
+  }
+  try {
+    db_.exec("ALTER TABLE ht_meta ADD COLUMN resize_progress BIGINT NOT NULL "
+             "DEFAULT 0");
+  } catch (...) {
+  }
 
-  auto rows = db_.query("SELECT n,k,load_factor,seed1,seed2,seed3,total_bins,is_resizing,new_total_bins,resize_progress FROM ht_meta WHERE id=1");
+  auto rows =
+      db_.query("SELECT "
+                "n,k,load_factor,seed1,seed2,seed3,total_bins,is_resizing,new_"
+                "total_bins,resize_progress FROM ht_meta WHERE id=1");
 
   TableParams p;
   if (!rows.empty()) {
@@ -240,7 +338,7 @@ TableParams HashTableDb::load_or_init_meta(uint64_t n, int k, double load_factor
     p.seed2 = std::stoull(rows[0][4]);
     p.seed3 = std::stoull(rows[0][5]);
     derive_sizes(p);
-    // Override derived bins with persisted bins (allows online resize without changing n/lf).
+    // 覆盖派生的 bins 与持久化的 bins (允许在线 resize 而不改变 n/lf)。
     p.total_bins = std::stoull(rows[0][6]);
     p.total_bins = std::max<uint64_t>(1, p.total_bins);
     p.capacity_slots = p.total_bins * p.bin_size;
@@ -249,39 +347,44 @@ TableParams HashTableDb::load_or_init_meta(uint64_t n, int k, double load_factor
     p.k = k;
     p.load_factor = load_factor;
 
-    auto now = static_cast<uint64_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+    auto now = static_cast<uint64_t>(
+        std::chrono::high_resolution_clock::now().time_since_epoch().count());
     p.seed1 = seed1.value_or(splitmix64(now ^ 0xA5A5A5A5A5A5A5A5ULL));
     p.seed2 = seed2.value_or(splitmix64(now ^ 0x0123456789ABCDEFULL));
     p.seed3 = seed3.value_or(splitmix64(now ^ 0xF0F0F0F0F0F0F0F0ULL));
 
     derive_sizes(p);
-    db_.exec("INSERT INTO ht_meta(id,n,k,load_factor,seed1,seed2,seed3,total_bins,is_resizing,new_total_bins,resize_progress) "
-             "VALUES(1," + std::to_string(p.n) + "," + std::to_string(p.k) + "," + std::to_string(p.load_factor) + "," +
-             std::to_string(p.seed1) + "," + std::to_string(p.seed2) + "," + std::to_string(p.seed3) + "," +
-             std::to_string(p.total_bins) + ",0,0,0)");
+    db_.exec("INSERT INTO "
+             "ht_meta(id,n,k,load_factor,seed1,seed2,seed3,total_bins,is_"
+             "resizing,new_total_bins,resize_progress) "
+             "VALUES(1," +
+             std::to_string(p.n) + "," + std::to_string(p.k) + "," +
+             std::to_string(p.load_factor) + "," + std::to_string(p.seed1) +
+             "," + std::to_string(p.seed2) + "," + std::to_string(p.seed3) +
+             "," + std::to_string(p.total_bins) + ",0,0,0)");
   }
   return p;
 }
 
-OpResult HashTableDb::init_table(const TableParams& p) {
+OpResult HashTableDb::init_table(const TableParams &p) {
   OpResult r;
   try {
-    // Reset any in-progress resize artifacts.
+    // 重置任何正在进行的 resize 工件。
     db_.exec(std::string("DROP TABLE IF EXISTS ") + kNextTable);
     db_.exec(std::string("DROP TABLE IF EXISTS ") + kOldTable);
 
-    // Build new tables first, then atomically swap them in.
-    // This avoids losing existing data if initialization fails midway (e.g. due to max_allowed_packet, timeouts).
+    // 首先构建新的表，然后原子地交换它们。
+    // 这避免了在初始化失败中途 (例如由于 max_allowed_packet, 超时) 丢失现有数据。
+    // 由于 max_allowed_packet, 超时)。
     db_.exec("DROP TABLE IF EXISTS hash_table_new");
-    // No key_slots in simplified schema.
+    // 简化模式中没有 key_slots。
 
-    db_.exec(
-        "CREATE TABLE hash_table_new ("
-        " idx BIGINT PRIMARY KEY,"
-        " `key` BIGINT UNSIGNED NULL,"
-        " fp SMALLINT UNSIGNED NOT NULL,"
-        " UNIQUE KEY uk_key(`key`)"
-        ")");
+    db_.exec("CREATE TABLE hash_table_new ("
+             " idx BIGINT PRIMARY KEY,"
+             " `key` BIGINT UNSIGNED NULL,"
+             " fp SMALLINT UNSIGNED NOT NULL,"
+             " UNIQUE KEY uk_key(`key`)"
+             ")");
 
     // bulk insert slots in batches
     const uint64_t batch = 5000;
@@ -290,20 +393,22 @@ OpResult HashTableDb::init_table(const TableParams& p) {
       std::string sql = "INSERT INTO hash_table_new(idx,`key`,fp) VALUES ";
       for (uint64_t i = base; i < end; i++) {
         sql += "(" + std::to_string(i) + ",NULL,0)";
-        if (i + 1 != end) sql += ",";
+        if (i + 1 != end)
+          sql += ",";
       }
       db_.exec(sql);
     }
 
-    // Swap in (atomic in MySQL): rename tables.
-    // We must handle 3 states robustly:
-    // - both live tables exist
-    // - neither exists (fresh DB)
-    // - only one exists (partial/corrupted state). In that case, drop the existing one then swap in.
-    auto table_exists = [&](const char* name) -> bool {
-      auto cnt = db_.select_one_u64(
-          "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='" +
-          std::string(name) + "'");
+    // 交换 in (atomic in MySQL): 重命名表。
+    // 我们必须稳健地处理 3 种状态:
+    // - 两个 live 表都存在
+    // - 都不存在 (fresh DB)
+    // - 只有一个存在 (部分/损坏的状态)。在这种情况下，删除现有的一个然后交换 in。
+    auto table_exists = [&](const char *name) -> bool {
+      auto cnt =
+          db_.select_one_u64("SELECT COUNT(*) FROM information_schema.tables "
+                             "WHERE table_schema=DATABASE() AND table_name='" +
+                             std::string(name) + "'");
       return cnt.has_value() && *cnt > 0;
     };
 
@@ -313,37 +418,38 @@ OpResult HashTableDb::init_table(const TableParams& p) {
     db_.exec("DROP TABLE IF EXISTS hash_table_old");
     db_.exec("DROP TABLE IF EXISTS key_slots_old");
 
-    // We no longer use key_slots at all; if it exists, drop it as part of init.
     if (has_ks) {
       db_.exec("DROP TABLE IF EXISTS key_slots");
     }
 
     if (has_ht) {
-      db_.exec("RENAME TABLE hash_table TO hash_table_old, hash_table_new TO hash_table");
+      db_.exec("RENAME TABLE hash_table TO hash_table_old, hash_table_new TO "
+               "hash_table");
       db_.exec("DROP TABLE IF EXISTS hash_table_old");
     } else {
       db_.exec("RENAME TABLE hash_table_new TO hash_table");
     }
 
-    // Clear resize flags and persist current total_bins.
+    // 清除 resize 标志并持久化当前 total_bins。
     db_.exec("UPDATE ht_meta SET total_bins=" + std::to_string(p.total_bins) +
              ", is_resizing=0, new_total_bins=0, resize_progress=0 WHERE id=1");
 
     r.ok = true;
     return r;
-  } catch (const std::exception& e) {
+  } catch (const std::exception &e) {
     r.ok = false;
     r.error = e.what();
     return r;
   }
 }
 
-OpResult HashTableDb::find_key(const TableParams& p, uint64_t key) {
+OpResult HashTableDb::find_key(const TableParams &p, uint64_t key) {
   OpResult r;
   try {
-    // During resizing: check next table first, then active table.
-    // We intentionally avoid FOR UPDATE here; find is read-only.
-    auto meta_rows = db_.query("SELECT is_resizing,new_total_bins FROM ht_meta WHERE id=1");
+    // 在 resizing 期间: 首先检查 next table, 然后检查 active table。
+    // 我们故意避免在这里使用 FOR UPDATE; find 是只读的。
+    auto meta_rows =
+        db_.query("SELECT is_resizing,new_total_bins FROM ht_meta WHERE id=1");
     bool resizing = false;
     uint64_t new_bins = 0;
     if (!meta_rows.empty() && meta_rows[0].size() >= 2) {
@@ -353,37 +459,44 @@ OpResult HashTableDb::find_key(const TableParams& p, uint64_t key) {
 
     auto hf = make_hash(p);
     uint16_t fp = hf.fingerprint(key);
-    auto find_in_table = [&](const std::string& table, uint64_t total_bins) -> bool {
+    auto find_in_table = [&](const std::string &table,
+                             uint64_t total_bins) -> bool {
       uint64_t b = hf.h_bin(key, total_bins);
       uint64_t m = hf.h_pref(key, p.num_mini_bins);
 
       auto verify_by_range = [&](uint64_t start, uint64_t end) -> bool {
-        auto rows = db_.query("SELECT 1 FROM " + table + " WHERE idx BETWEEN " + std::to_string(start) + " AND " +
-                              std::to_string(end) + " AND `key`=" + std::to_string(key) + " AND fp=" + std::to_string(fp) +
-                              " LIMIT 1");
+        auto rows =
+            db_.query("SELECT 1 FROM " + table + " WHERE idx BETWEEN " +
+                      std::to_string(start) + " AND " + std::to_string(end) +
+                      " AND `key`=" + std::to_string(key) +
+                      " AND fp=" + std::to_string(fp) + " LIMIT 1");
         return !rows.empty();
       };
 
-      // Probe 1: preferred mini-bin scan
+      // 探测 1: 偏好 mini-bin 扫描
       {
         r.probes++;
         uint64_t start = mini_range_start(p, b, m);
         uint64_t end = mini_range_end(p, b, m);
-        if (verify_by_range(start, end)) return true;
+        if (verify_by_range(start, end))
+          return true;
       }
-      // Probe 2: fallback scan
+      // 探测 2: fallback 扫描
       {
         r.probes++;
         uint64_t start = fallback_start(p, b);
         uint64_t end = fallback_end(p, b);
-        if (verify_by_range(start, end)) return true;
+        if (verify_by_range(start, end))
+          return true;
       }
       return false;
     };
 
-    auto table_exists2 = [&](const std::string& name) -> bool {
-      auto cnt = db_.select_one_u64(
-          "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='" + name + "'");
+    auto table_exists2 = [&](const std::string &name) -> bool {
+      auto cnt =
+          db_.select_one_u64("SELECT COUNT(*) FROM information_schema.tables "
+                             "WHERE table_schema=DATABASE() AND table_name='" +
+                             name + "'");
       return cnt.has_value() && *cnt > 0;
     };
 
@@ -395,19 +508,19 @@ OpResult HashTableDb::find_key(const TableParams& p, uint64_t key) {
     }
     r.ok = find_in_table(kActiveTable, p.total_bins);
     return r;
-  } catch (const std::exception& e) {
+  } catch (const std::exception &e) {
     r.ok = false;
     r.error = e.what();
     return r;
   }
 }
 
-OpResult HashTableDb::erase_key(const TableParams& p, uint64_t key) {
+OpResult HashTableDb::erase_key(const TableParams &p, uint64_t key) {
   OpResult r;
   try {
     db_.begin();
 
-    // If resizing, migrate one bin and try erase in next then active.
+    // 在 resizing 期间, 迁移一个 bin 并尝试在 next 然后 active 中删除。
     auto m = load_resize_meta_for_update();
     if (m.is_resizing) {
       process_resize_step(p);
@@ -432,35 +545,42 @@ OpResult HashTableDb::erase_key(const TableParams& p, uint64_t key) {
     db_.commit();
     r.ok = true;
     return r;
-  } catch (const std::exception& e) {
-    try { db_.rollback(); } catch (...) {}
+  } catch (const std::exception &e) {
+    try {
+      db_.rollback();
+    } catch (...) {
+    }
     r.ok = false;
     r.error = e.what();
     return r;
   }
 }
 
-InsertResult HashTableDb::insert_key(const TableParams& p, uint64_t key, bool with_trace) {
-  // Online resize: during resizing we always write into next table and migrate 1 bin per write op.
+InsertResult HashTableDb::insert_key(const TableParams &p, uint64_t key,
+                                     bool with_trace) {
+  // 在线 resize: 在 resizing 期间我们总是写入 next table 并迁移 1 个 bin 每写操作。
   try {
     db_.begin();
     auto m = load_resize_meta_for_update();
     if (!m.is_resizing) {
-      // maybe start resize based on load
+      // 基于负载开始 resize
       maybe_start_resize(p, /*trigger_load=*/0.99);
       db_.commit();
       return insert_key_into_table(kActiveTable, p, key, with_trace);
     }
-    // migrate one step (inside same transaction)
+    // 迁移一个步骤 (在同一个事务中)
     process_resize_step(p);
-    // write to next table using new_total_bins
+    // 写入 next table 使用 new_total_bins
     TableParams np = p;
     np.total_bins = m.new_total_bins;
     np.capacity_slots = np.total_bins * np.bin_size;
     db_.commit();
     return insert_key_into_table(kNextTable, np, key, with_trace);
-  } catch (const std::exception& e) {
-    try { db_.rollback(); } catch (...) {}
+  } catch (const std::exception &e) {
+    try {
+      db_.rollback();
+    } catch (...) {
+    }
     InsertResult r;
     r.ok = false;
     r.error = e.what();
@@ -468,25 +588,31 @@ InsertResult HashTableDb::insert_key(const TableParams& p, uint64_t key, bool wi
   }
 }
 
-std::vector<BinStats> HashTableDb::bin_stats(const TableParams& p, uint64_t bin_start, uint64_t bin_count) {
+std::vector<BinStats> HashTableDb::bin_stats(const TableParams &p,
+                                             uint64_t bin_start,
+                                             uint64_t bin_count) {
   uint64_t mini_total = p.mini_bin_size * p.num_mini_bins;
   uint64_t bin_end = std::min<uint64_t>(p.total_bins, bin_start + bin_count);
-  if (bin_start >= bin_end) return {};
+  if (bin_start >= bin_end)
+    return {};
 
   // group-by over whole table, but filtered by bin range
   std::string sql =
-      "SELECT (idx DIV " + std::to_string(p.bin_size) + ") AS b,"
+      "SELECT (idx DIV " + std::to_string(p.bin_size) +
+      ") AS b,"
       " SUM(fp<>0) AS used_slots,"
-      " SUM(CASE WHEN fp<>0 AND (idx % " + std::to_string(p.bin_size) + ") >= " + std::to_string(mini_total) +
+      " SUM(CASE WHEN fp<>0 AND (idx % " +
+      std::to_string(p.bin_size) + ") >= " + std::to_string(mini_total) +
       " THEN 1 ELSE 0 END) AS fb_used"
       " FROM hash_table"
-      " WHERE (idx DIV " + std::to_string(p.bin_size) + ") BETWEEN " + std::to_string(bin_start) + " AND " +
-      std::to_string(bin_end - 1) + " GROUP BY b ORDER BY b";
+      " WHERE (idx DIV " +
+      std::to_string(p.bin_size) + ") BETWEEN " + std::to_string(bin_start) +
+      " AND " + std::to_string(bin_end - 1) + " GROUP BY b ORDER BY b";
 
   auto rows = db_.query(sql);
   std::vector<BinStats> out;
   out.reserve(rows.size());
-  for (auto& r : rows) {
+  for (auto &r : rows) {
     BinStats bs;
     bs.bin = std::stoull(r[0]);
     bs.used_slots = static_cast<uint32_t>(std::stoul(r[1]));
@@ -496,38 +622,43 @@ std::vector<BinStats> HashTableDb::bin_stats(const TableParams& p, uint64_t bin_
   return out;
 }
 
-std::vector<std::array<uint64_t, 3>> HashTableDb::snapshot_bins(const TableParams& p, uint64_t bin_start, uint64_t bin_count) {
+std::vector<std::array<uint64_t, 3>>
+HashTableDb::snapshot_bins(const TableParams &p, uint64_t bin_start,
+                           uint64_t bin_count) {
   uint64_t bin_end = std::min<uint64_t>(p.total_bins, bin_start + bin_count);
-  if (bin_start >= bin_end) return {};
+  if (bin_start >= bin_end)
+    return {};
 
   uint64_t start_idx = bin_start * p.bin_size;
   uint64_t end_idx = bin_end * p.bin_size - 1;
 
-  auto rows = db_.query("SELECT idx, fp FROM hash_table WHERE idx BETWEEN " + std::to_string(start_idx) + " AND " +
+  auto rows = db_.query("SELECT idx, fp FROM hash_table WHERE idx BETWEEN " +
+                        std::to_string(start_idx) + " AND " +
                         std::to_string(end_idx) + " ORDER BY idx");
 
   std::vector<std::array<uint64_t, 3>> out;
   out.reserve(rows.size());
-  for (auto& r : rows) {
+  for (auto &r : rows) {
     out.push_back({std::stoull(r[0]), std::stoull(r[1]), 0});
   }
   return out;
 }
 
-Stats HashTableDb::stats(const TableParams& p) {
+Stats HashTableDb::stats(const TableParams &p) {
   Stats s;
   auto used = db_.query("SELECT COUNT(*) FROM hash_table WHERE fp<>0");
-  if (!used.empty()) s.used_slots = std::stoull(used[0][0]);
+  if (!used.empty())
+    s.used_slots = std::stoull(used[0][0]);
 
   // fallback region are the tail slots of each bin
   uint64_t mini_total = p.mini_bin_size * p.num_mini_bins;
-  std::string sql =
-      "SELECT COUNT(*) FROM hash_table WHERE fp<>0 AND (idx % " + std::to_string(p.bin_size) + ") >= " +
-      std::to_string(mini_total);
+  std::string sql = "SELECT COUNT(*) FROM hash_table WHERE fp<>0 AND (idx % " +
+                    std::to_string(p.bin_size) +
+                    ") >= " + std::to_string(mini_total);
   auto fb = db_.query(sql);
-  if (!fb.empty()) s.fallback_used = std::stoull(fb[0][0]);
+  if (!fb.empty())
+    s.fallback_used = std::stoull(fb[0][0]);
   return s;
 }
 
 } // namespace otsh
-

@@ -9,24 +9,28 @@ uint64_t splitmix64(uint64_t x) {
   return x ^ (x >> 31);
 }
 
+// 计算 key 所属的 bin 索引
 uint64_t HashFunc::h_bin(uint64_t key, uint64_t total_bins) const {
   return splitmix64(key ^ seed1) % total_bins;
 }
 
+// 计算 key 所属的偏好 mini-bin 索引
 uint64_t HashFunc::h_pref(uint64_t key, uint64_t num_mini_bins) const {
   return splitmix64(key ^ seed2) % num_mini_bins;
 }
 
+// 计算 key 的指纹
 uint16_t HashFunc::fingerprint(uint64_t key) const {
-  // fp==0 is reserved to mean "empty slot" (per design doc / DB schema usage).
+  // fp==0 表示空槽
   uint16_t fp = static_cast<uint16_t>(splitmix64(key ^ seed3) & 0xFFFFu);
   return fp == 0 ? static_cast<uint16_t>(1) : fp;
 }
 
-uint64_t HashFunc::kick_slot(uint16_t fp, uint64_t depth, uint64_t mini_bin_size) const {
+// 计算踢出槽的索引
+uint64_t HashFunc::kick_slot(uint16_t fp, uint64_t depth,
+                             uint64_t mini_bin_size) const {
   uint64_t x = (static_cast<uint64_t>(fp) << 32) ^ depth ^ seed2;
   return splitmix64(x) % mini_bin_size;
 }
 
 } // namespace otsh
-

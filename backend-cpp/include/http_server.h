@@ -1,6 +1,7 @@
 #pragma once
 
-// Header-only HTTP + JSON dependencies vendored under include/third_party/.
+// HTTP/JSON 依赖由 CMake FetchContent 提供（cpp-httplib、nlohmann_json），
+// 通过 <httplib.h> / <nlohmann/json.hpp> 包含，无需本地 vendor。
 #include "config.h"
 #include "db.h"
 #include "ht.h"

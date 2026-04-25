@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 
@@ -67,7 +68,8 @@ public:
   // Synchronous resize: when load reaches trigger, pause the caller's work,
   // run resize steps until finished, then return.
   // This matches a simple single-threaded control flow:
-  //   insert... -> detect threshold -> resize_to_completion() -> resume insert...
+  //   insert... -> detect threshold -> resize_to_completion() -> resume
+  //   insert...
   void resize_to_completion(const TableParams &p);
 
   // Kick depth histogram (in-memory only, cleared on init/rebuild).
@@ -89,6 +91,10 @@ public:
 
 private:
   Db &db_;
+
+  // --- resize state (in-process only; not persisted) ---
+  mutable std::mutex resize_mu_;
+  ResizeMeta resize_state_;
 
   // depth -> count (0..k). We also keep one extra bucket for depth==k+1
   // (fallback marker). We avoid std::vector<std::atomic<...>> because atomics
@@ -112,7 +118,7 @@ private:
   void store_resize_meta(const ResizeMeta &m);
   void maybe_start_resize(const TableParams &p, double trigger_load);
   void process_resize_step(const TableParams &p);
-  void finish_resize(const ResizeMeta &m);
+  void finish_resize(const TableParams &p, const ResizeMeta &m);
 
   // Transactional operations (all assume caller runs in a transaction)
   std::optional<uint64_t> claim_empty_slot_in_range(const std::string &table,

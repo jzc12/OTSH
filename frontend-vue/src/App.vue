@@ -1,13 +1,12 @@
 <template>
     <div class="app">
         <BusyOverlay :busy="blocked" :busy-title="busyTitle" :busy-hint="busyHint" :elapsed-ms="elapsedMs"
-            :resize="resizeState" />
-
+        />
         <AppHeader :backend-base="backendBase" />
 
         <section class="layout">
             <SidebarPanel :busy="blocked" :init-form="initForm" :dist-form="distForm" :batch-form="batchForm"
-                :query-form="queryForm" :params="params" :resize="resizeState" :rt="rt"
+                :query-form="queryForm" :params="params" :rt="rt"
                 :mini-bin-size-display="miniBinSizeDisplay" :fmt-ms="fmtMs" :key-value="key" :op-result="opResult"
                 @update:keyValue="setKey" @initTable="initTable" @refreshStats="refreshStats"
                 @refreshKickHist="refreshKickHist" @insertOne="insertOne" @findOne="findOne" @eraseOne="eraseOne"
@@ -26,7 +25,7 @@
 
 <script setup lang="ts">
 import axios from 'axios'
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import AppHeader from './components/app/AppHeader.vue'
 import BusyOverlay from './components/app/BusyOverlay.vue'
 import ChartsPanel from './components/app/ChartsPanel.vue'
@@ -41,7 +40,6 @@ const busyHint = ref('这是一个可能较慢的数据库操作，请稍等。'
 const startedAt = ref<number>(0)
 const elapsedMs = ref<number>(0)
 let tickTimer: number | null = null
-let resizePollTimer: number | null = null
 const key = ref<number>(1)
 const opResult = ref<string>('-')
 
@@ -76,7 +74,6 @@ const snapForm = ref({
 
 const params = ref<any>(null)
 const stats = ref<any>(null)
-const resizeState = ref<any>(null)
 const lastTraceIdx = ref<Set<number>>(new Set())
 const snapshot = ref<any>(null)
 const history = ref<Array<{ used: number; fb: number }>>([])
@@ -146,38 +143,12 @@ async function refreshStats() {
         if (data?.params) {
             params.value = params.value ? { ...params.value, ...data.params } : data.params
             if (typeof data.params.n === 'number') initForm.value.n = data.params.n
-        }
-
-        resizeState.value = (data as any)?.resize ?? null
+        }       
     } catch (e: any) {
         opResult.value = `stats error: ${e?.message ?? e}`
     } finally {
         endBusy()
     }
-}
-
-async function refreshResizeStateLight() {
-    try {
-        const { data } = await axios.get('/api/resize_state')
-        if (data?.ok && data?.resize) {
-            resizeState.value = data.resize
-        }
-    } catch {
-        // polling: ignore errors
-    }
-}
-
-function startResizePolling() {
-    if (resizePollTimer) return
-    // only reads ht_meta (no COUNT(*))
-    resizePollTimer = window.setInterval(() => {
-        void refreshResizeStateLight()
-    }, 500)
-}
-
-function stopResizePolling() {
-    if (resizePollTimer) window.clearInterval(resizePollTimer)
-    resizePollTimer = null
 }
 
 async function insertOne() {
@@ -252,6 +223,10 @@ async function batchInsert() {
         })
         rt.value.batch_insert_ms = performance.now() - t0
         opResult.value = `batch ok_count=${data.ok_count}/${data.total} avg_probes=${Number(data.avg_probes).toFixed(3)}`
+        if (data?.params) {
+            params.value = params.value ? { ...params.value, ...data.params } : data.params
+            if (typeof data.params.n === 'number') initForm.value.n = data.params.n
+        }
         await refreshStats()
         await refreshSnapshot()
         await refreshKickHist()
@@ -364,19 +339,6 @@ function endBusy() {
     if (tickTimer) window.clearInterval(tickTimer)
     tickTimer = null
 }
-
-watch(
-    () => !!resizeState.value?.is_resizing,
-    (isResizing) => {
-        if (isResizing) startResizePolling()
-        else stopResizePolling()
-    },
-    { immediate: true },
-)
-
-onBeforeUnmount(() => {
-    stopResizePolling()
-})
 
 </script>
 

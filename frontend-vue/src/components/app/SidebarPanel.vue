@@ -31,32 +31,12 @@
       </div>
 
       <div class="kv mono" v-if="params">
+        <div class="kv-row"><span class="kv-k">n</span><span class="kv-v">{{ params.n }}</span></div>
         <div class="kv-row"><span class="kv-k">total_bins</span><span class="kv-v">{{ params.total_bins }}</span></div>
         <div class="kv-row"><span class="kv-k">bin_size</span><span class="kv-v">{{ params.bin_size }}</span></div>
         <div class="kv-row"><span class="kv-k">mini_bin_size</span><span class="kv-v">{{ params.mini_bin_size }}</span></div>
         <div class="kv-row"><span class="kv-k">num_mini_bins</span><span class="kv-v">{{ params.num_mini_bins }}</span></div>
         <div class="kv-row"><span class="kv-k">capacity_slots</span><span class="kv-v">{{ params.capacity_slots }}</span></div>
-        <div class="kv-row" v-if="resize">
-          <span class="kv-k">resize</span>
-          <span class="kv-v">
-            <span v-if="resize.is_resizing">
-              running {{ resize.resize_progress }}/{{ resize.total_bins }}
-            </span>
-            <span v-else>idle</span>
-          </span>
-        </div>
-        <div class="kv-row" v-if="resize && resize.is_resizing">
-          <span class="kv-k">migrated_keys</span><span class="kv-v">{{ resize.migrated_keys }}</span>
-        </div>
-        <div class="kv-row" v-if="resize && resize.is_resizing">
-          <span class="kv-k">elapsed</span><span class="kv-v">{{ fmtMs(resize.elapsed_ms) }}</span>
-        </div>
-        <div class="kv-row" v-if="resize && resize.is_resizing">
-          <span class="kv-k">last_step</span><span class="kv-v">{{ fmtMs(resize.last_step_ms) }}</span>
-        </div>
-        <div class="kv-row" v-if="resize && resize.is_resizing">
-          <span class="kv-k">new_total_bins</span><span class="kv-v">{{ resize.new_total_bins }}</span>
-        </div>
       </div>
     </div>
 
@@ -161,17 +141,6 @@ const props = defineProps<{
   batchForm: { count: number; skew: number }
   queryForm: { count: number; hit_rate: number }
   params: any
-  resize: {
-    is_resizing: boolean
-    resize_progress: number
-    total_bins: number
-    new_total_bins: number
-    migrated_keys: number
-    started_at_ms: number
-    elapsed_ms: number
-    last_step_ms: number
-    finished_total_ms: number
-  } | null
   rt: {
     init_ms: number | null
     insert_ms: number | null

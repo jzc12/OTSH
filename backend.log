@@ -1,0 +1,50 @@
+2026-04-25 12:42:02 [INFO] server starting, bind=0.0.0.0 port=8080 db=root@127.0.0.1:3306/otsh
+2026-04-25 12:42:21 [INFO] init done ok=1 n=500 k=2 bins=25 bin_size=20 slots=500 elapsed_ms=566
+2026-04-25 12:42:21 [INFO] POST /api/init -> 200 (167 bytes)
+2026-04-25 12:42:21 [INFO] GET /api/stats -> 200 (175 bytes)
+2026-04-25 12:42:21 [INFO] GET /api/snapshot -> 200 (684 bytes)
+2026-04-25 12:42:21 [INFO] GET /api/experiment/kick_depth_hist -> 200 (58 bytes)
+2026-04-25 12:42:30 [INFO] batch_insert start count=1000 dist=uniform key_space=10000 skew=1.2
+2026-04-25 12:42:45 [INFO] batch_insert done ok=305/1000 avg_probes=0.324 elapsed_ms=14703 used=290 fallback_used=16
+2026-04-25 12:42:45 [INFO] POST /api/batch_insert -> 200 (98 bytes)
+2026-04-25 12:42:45 [INFO] GET /api/stats -> 200 (182 bytes)
+2026-04-25 12:42:45 [INFO] GET /api/snapshot -> 200 (1796 bytes)
+2026-04-25 12:42:45 [INFO] GET /api/experiment/kick_depth_hist -> 200 (65 bytes)
+2026-04-25 12:43:26 [INFO] GET /api/resize_state -> 200 (132 bytes)
+2026-04-25 12:44:05 [INFO] GET /api/resize_state -> 200 (132 bytes)
+2026-04-25 12:44:46 [INFO] GET /api/resize_state -> 200 (132 bytes)
+2026-04-25 12:45:26 [INFO] GET /api/resize_state -> 200 (132 bytes)
+2026-04-25 12:46:06 [INFO] GET /api/resize_state -> 200 (132 bytes)
+2026-04-25 12:46:45 [INFO] GET /api/resize_state -> 200 (132 bytes)
+2026-04-25 12:47:25 [INFO] GET /api/resize_state -> 200 (132 bytes)
+2026-04-25 12:48:05 [INFO] GET /api/resize_state -> 200 (132 bytes)
+2026-04-25 12:48:45 [INFO] GET /api/resize_state -> 200 (132 bytes)
+2026-04-25 12:49:25 [INFO] GET /api/resize_state -> 200 (132 bytes)
+2026-04-25 12:50:05 [INFO] GET /api/resize_state -> 200 (132 bytes)
+2026-04-25 12:50:45 [INFO] GET /api/resize_state -> 200 (132 bytes)
+2026-04-25 12:51:25 [INFO] GET /api/resize_state -> 200 (132 bytes)
+2026-04-25 12:52:05 [INFO] GET /api/resize_state -> 200 (132 bytes)
+2026-04-25 12:52:45 [INFO] GET /api/resize_state -> 200 (132 bytes)
+2026-04-25 13:24:44 [INFO] server starting, bind=0.0.0.0 port=8080 db=root@127.0.0.1:3306/otsh
+2026-04-25 13:25:09 [INFO] init done ok=1 n=1000 k=2 bins=50 bin_size=20 slots=1000 elapsed_ms=709
+2026-04-25 13:25:09 [INFO] POST /api/init -> 200 (163 bytes)
+2026-04-25 13:25:09 [INFO] GET /api/stats -> 200 (255 bytes)
+2026-04-25 13:25:09 [INFO] GET /api/snapshot -> 200 (1247 bytes)
+2026-04-25 13:25:09 [INFO] GET /api/experiment/kick_depth_hist -> 200 (58 bytes)
+2026-04-25 13:57:57 [INFO] server starting, bind=0.0.0.0 port=8080 db=root@127.0.0.1:3306/otsh
+2026-04-25 13:58:09 [INFO] init done ok=1 n=10000 k=2 bins=500 bin_size=20 slots=10000 elapsed_ms=740
+2026-04-25 13:58:09 [INFO] POST /api/init -> 200 (167 bytes)
+2026-04-25 13:58:09 [INFO] GET /api/stats -> 200 (142 bytes)
+2026-04-25 13:58:09 [INFO] GET /api/snapshot -> 200 (1459 bytes)
+2026-04-25 13:58:09 [INFO] GET /api/experiment/kick_depth_hist -> 200 (58 bytes)
+2026-04-25 13:58:12 [INFO] insert key=1 ok=1 probes=1 trace=1 elapsed_us=28749
+2026-04-25 13:58:12 [INFO] POST /api/insert -> 200 (108 bytes)
+2026-04-25 13:58:12 [INFO] GET /api/stats -> 200 (142 bytes)
+2026-04-25 13:58:13 [INFO] GET /api/snapshot -> 200 (1459 bytes)
+2026-04-25 13:58:13 [INFO] GET /api/experiment/kick_depth_hist -> 200 (59 bytes)
+2026-04-25 13:58:15 [INFO] batch_insert start count=1500 dist=uniform key_space=15000 skew=1
+2026-04-25 13:58:38 [INFO] batch_insert done ok=1499/1500 avg_probes=0.952667 elapsed_ms=22504 used=1429 fallback_used=0
+2026-04-25 13:58:38 [INFO] POST /api/batch_insert -> 200 (102 bytes)
+2026-04-25 13:58:38 [INFO] GET /api/stats -> 200 (145 bytes)
+2026-04-25 13:58:38 [INFO] GET /api/snapshot -> 200 (2424 bytes)
+2026-04-25 13:58:38 [INFO] GET /api/experiment/kick_depth_hist -> 200 (64 bytes)

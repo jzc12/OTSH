@@ -45,9 +45,9 @@ void HashTableDb::derive_sizes(TableParams &p) {
 
   p.bin_size = p.mini_bin_size * p.num_mini_bins + p.fallback_size;
 
-  // 容量 ~ n / load_factor
-  uint64_t target_capacity = static_cast<uint64_t>(
-      std::ceil(static_cast<double>(p.n) / std::max(0.01, p.load_factor)));
+  // 约定：n 表示“空间/槽位规模”（capacity_slots 期望与 n 同阶/近似）。
+  // load_factor 仅作为扩容阈值（触发在线 resize），不参与容量规划。
+  uint64_t target_capacity = std::max<uint64_t>(1, p.n);
   p.total_bins = static_cast<uint64_t>(std::ceil(
       static_cast<double>(target_capacity) / static_cast<double>(p.bin_size)));
   p.total_bins = std::max<uint64_t>(1, p.total_bins);
@@ -232,7 +232,8 @@ bool HashTableDb::insert_with_kick(const std::string &table,
 // 插入到表中
 InsertResult HashTableDb::insert_key_into_table(const std::string &table,
                                                 const TableParams &p,
-                                                uint64_t key, bool with_trace) {
+                                                uint64_t key, bool with_trace,
+                                                bool manage_txn) {
   InsertResult r;
   try {
     auto hf = make_hash(p);
@@ -243,12 +244,190 @@ InsertResult HashTableDb::insert_key_into_table(const std::string &table,
     r.bin = b;
     r.mini = m;
 
-    db_.begin();
+    if (manage_txn)
+      db_.begin();
     if (db_.select_idx_for_key_for_update(table, key).has_value()) {
-      db_.commit();
+      if (manage_txn)
+        db_.commit();
       r.ok = true;
       return r;
     }
+
+    // --- Local simulation path (minimize SQL round-trips) ---
+    // Lock the whole bin once, simulate kick chain in-memory, then batch-write
+    // changed slots back with a single UPDATE ... CASE.
+    const uint64_t bin_start = bin_offset(p, b);
+    const uint64_t bin_end = bin_start + p.bin_size - 1;
+    auto rows =
+        db_.query("SELECT idx, `key`, fp FROM " + table +
+                  " WHERE idx BETWEEN " + std::to_string(bin_start) + " AND " +
+                  std::to_string(bin_end) + " ORDER BY idx FOR UPDATE");
+    r.probes += 1; // one contiguous range scan for the whole bin
+
+    struct Slot {
+      std::optional<uint64_t> key;
+      uint16_t fp = 0;
+    };
+    std::vector<Slot> slots;
+    slots.resize(static_cast<size_t>(p.bin_size));
+    for (const auto &rr : rows) {
+      if (rr.size() < 3)
+        continue;
+      uint64_t idx = std::stoull(rr[0]);
+      if (idx < bin_start || idx > bin_end)
+        continue;
+      size_t off = static_cast<size_t>(idx - bin_start);
+      Slot s;
+      if (!rr[1].empty())
+        s.key = std::stoull(rr[1]);
+      s.fp = static_cast<uint16_t>(std::stoul(rr[2]));
+      slots[off] = s;
+    }
+
+    auto write_back = [&](const std::vector<size_t> &changed) {
+      if (changed.empty())
+        return;
+      std::string sql = "UPDATE " + table + " SET ";
+
+      // key CASE
+      sql += "`key` = CASE idx ";
+      for (size_t off : changed) {
+        uint64_t idx = bin_start + static_cast<uint64_t>(off);
+        sql += "WHEN " + std::to_string(idx) + " THEN ";
+        if (slots[off].fp == 0 || !slots[off].key.has_value())
+          sql += "NULL ";
+        else
+          sql += std::to_string(*slots[off].key) + " ";
+      }
+      sql += "ELSE `key` END, ";
+
+      // fp CASE
+      sql += "fp = CASE idx ";
+      for (size_t off : changed) {
+        uint64_t idx = bin_start + static_cast<uint64_t>(off);
+        sql += "WHEN " + std::to_string(idx) + " THEN " +
+               std::to_string(slots[off].fp) + " ";
+      }
+      sql += "ELSE fp END ";
+
+      // WHERE idx IN (...)
+      sql += "WHERE idx IN (";
+      for (size_t i = 0; i < changed.size(); i++) {
+        if (i)
+          sql += ",";
+        sql += std::to_string(bin_start + static_cast<uint64_t>(changed[i]));
+      }
+      sql += ")";
+      db_.exec(sql);
+    };
+
+    auto mark_trace = [&](uint64_t idx, uint16_t from_fp, uint16_t to_fp,
+                          int depth, const char *action) {
+      if (!with_trace)
+        return;
+      r.trace.push_back(KickStep{.idx = idx,
+                                 .from_fp = from_fp,
+                                 .to_fp = to_fp,
+                                 .depth = depth,
+                                 .action = action});
+    };
+
+    const uint64_t mini_total = p.mini_bin_size * p.num_mini_bins;
+    const size_t mini_off0 = static_cast<size_t>(m * p.mini_bin_size);
+    const size_t mini_off1 = mini_off0 + static_cast<size_t>(p.mini_bin_size);
+
+    std::vector<size_t> changed;
+    changed.reserve(static_cast<size_t>(p.k + 4));
+
+    // Case 1: preferred mini-bin has empty slot.
+    for (size_t off = mini_off0; off < mini_off1; off++) {
+      if (slots[off].fp == 0) {
+        uint64_t idx = bin_start + static_cast<uint64_t>(off);
+        slots[off].fp = fp;
+        slots[off].key = key;
+        changed.push_back(off);
+        if (kick_hist_ && 0 < kick_hist_size_)
+          kick_hist_[0].fetch_add(1, std::memory_order_relaxed);
+        mark_trace(idx, 0, fp, 0, "place");
+        write_back(changed);
+        if (manage_txn)
+          db_.commit();
+        r.ok = true;
+        return r;
+      }
+    }
+
+    // Case 2: run k-kick chain within mini-bin (in-memory), then fallback.
+    uint64_t cur_key = key;
+    uint16_t cur_fp = fp;
+
+    for (uint64_t depth = 0; depth <= static_cast<uint64_t>(p.k); depth++) {
+      uint64_t slot_in_mini = hf.kick_slot(cur_fp, depth, p.mini_bin_size);
+      size_t off = mini_off0 + static_cast<size_t>(slot_in_mini);
+      if (off >= mini_off1)
+        off = mini_off0; // safety
+
+      uint64_t idx = bin_start + static_cast<uint64_t>(off);
+      Slot &victim = slots[off];
+      if (victim.fp == 0) {
+        victim.fp = cur_fp;
+        victim.key = cur_key;
+        changed.push_back(off);
+        if (kick_hist_ && depth < kick_hist_size_)
+          kick_hist_[depth].fetch_add(1, std::memory_order_relaxed);
+        mark_trace(idx, 0, cur_fp, static_cast<int>(depth), "place");
+        write_back(changed);
+        if (manage_txn)
+          db_.commit();
+        r.ok = true;
+        return r;
+      }
+      if (!victim.key.has_value())
+        throw std::runtime_error(
+            "invariant violated: occupied slot missing key");
+
+      uint16_t ev_fp = victim.fp;
+      uint64_t ev_key = *victim.key;
+
+      victim.fp = cur_fp;
+      victim.key = cur_key;
+      changed.push_back(off);
+      if (kick_hist_ && depth < kick_hist_size_)
+        kick_hist_[depth].fetch_add(1, std::memory_order_relaxed);
+      mark_trace(idx, ev_fp, cur_fp, static_cast<int>(depth), "kick");
+
+      cur_fp = ev_fp;
+      cur_key = ev_key;
+    }
+
+    // fallback region: tail slots of the bin
+    for (size_t off = static_cast<size_t>(mini_total);
+         off < static_cast<size_t>(p.bin_size); off++) {
+      if (slots[off].fp == 0) {
+        uint64_t idx = bin_start + static_cast<uint64_t>(off);
+        slots[off].fp = cur_fp;
+        slots[off].key = cur_key;
+        changed.push_back(off);
+        if (kick_hist_ && (static_cast<size_t>(p.k + 1) < kick_hist_size_))
+          kick_hist_[static_cast<size_t>(p.k + 1)].fetch_add(
+              1, std::memory_order_relaxed);
+        mark_trace(idx, 0, cur_fp, static_cast<int>(p.k + 1), "fallback_add");
+        write_back(changed);
+        if (manage_txn)
+          db_.commit();
+        r.ok = true;
+        r.error = "placed_in_fallback_only";
+        return r;
+      }
+    }
+
+    // Local simulation failed: keep old slow path as fallback (correctness).
+    if (!manage_txn) {
+      throw std::runtime_error(
+          "local_insert_simulation_failed_in_existing_txn");
+    }
+    db_.rollback();
+    db_.begin();
 
     bool ok = insert_with_kick(table, p, hf, key, fp, 0,
                                with_trace ? &r.trace : nullptr, &r.probes);
@@ -272,7 +451,8 @@ InsertResult HashTableDb::insert_key_into_table(const std::string &table,
     return r;
   } catch (const std::exception &e) {
     try {
-      db_.rollback();
+      if (manage_txn)
+        db_.rollback();
     } catch (...) {
     }
     r.ok = false;
@@ -298,11 +478,16 @@ TableParams HashTableDb::load_or_init_meta(uint64_t n, int k,
            " total_bins BIGINT NOT NULL,"
            " is_resizing TINYINT NOT NULL DEFAULT 0,"
            " new_total_bins BIGINT NOT NULL DEFAULT 0,"
-           " resize_progress BIGINT NOT NULL DEFAULT 0"
+           " resize_progress BIGINT NOT NULL DEFAULT 0,"
+           " resize_started_at_ms BIGINT NOT NULL DEFAULT 0,"
+           " resize_migrated_keys BIGINT NOT NULL DEFAULT 0,"
+           " resize_last_step_ms BIGINT NOT NULL DEFAULT 0,"
+           " resize_elapsed_ms BIGINT NOT NULL DEFAULT 0,"
+           " resize_finished_total_ms BIGINT NOT NULL DEFAULT 0"
            ")");
 
-  // 最佳努力模式迁移现有的 ht_meta 由旧版本创建。MySQL/MariaDB 可能会拒绝 ADD COLUMN
-  // 如果它已经存在; 忽略那些错误。
+  // 最佳努力模式迁移现有的 ht_meta 由旧版本创建。MySQL/MariaDB 可能会拒绝 ADD
+  // COLUMN 如果它已经存在; 忽略那些错误。
   try {
     db_.exec(
         "ALTER TABLE ht_meta ADD COLUMN total_bins BIGINT NOT NULL DEFAULT 0");
@@ -323,11 +508,38 @@ TableParams HashTableDb::load_or_init_meta(uint64_t n, int k,
              "DEFAULT 0");
   } catch (...) {
   }
+  try {
+    db_.exec("ALTER TABLE ht_meta ADD COLUMN resize_started_at_ms BIGINT NOT "
+             "NULL DEFAULT 0");
+  } catch (...) {
+  }
+  try {
+    db_.exec("ALTER TABLE ht_meta ADD COLUMN resize_migrated_keys BIGINT NOT "
+             "NULL DEFAULT 0");
+  } catch (...) {
+  }
+  try {
+    db_.exec("ALTER TABLE ht_meta ADD COLUMN resize_last_step_ms BIGINT NOT "
+             "NULL DEFAULT 0");
+  } catch (...) {
+  }
+  try {
+    db_.exec("ALTER TABLE ht_meta ADD COLUMN resize_elapsed_ms BIGINT NOT NULL "
+             "DEFAULT 0");
+  } catch (...) {
+  }
+  try {
+    db_.exec("ALTER TABLE ht_meta ADD COLUMN resize_finished_total_ms BIGINT "
+             "NOT NULL DEFAULT 0");
+  } catch (...) {
+  }
 
   auto rows =
       db_.query("SELECT "
                 "n,k,load_factor,seed1,seed2,seed3,total_bins,is_resizing,new_"
-                "total_bins,resize_progress FROM ht_meta WHERE id=1");
+                "total_bins,resize_progress,resize_started_at_ms,resize_"
+                "migrated_keys,resize_last_step_ms,resize_elapsed_ms,resize_"
+                "finished_total_ms FROM ht_meta WHERE id=1");
 
   TableParams p;
   if (!rows.empty()) {
@@ -356,12 +568,14 @@ TableParams HashTableDb::load_or_init_meta(uint64_t n, int k,
     derive_sizes(p);
     db_.exec("INSERT INTO "
              "ht_meta(id,n,k,load_factor,seed1,seed2,seed3,total_bins,is_"
-             "resizing,new_total_bins,resize_progress) "
+             "resizing,new_total_bins,resize_progress,resize_started_at_ms,"
+             "resize_migrated_keys,resize_last_step_ms,resize_elapsed_ms,"
+             "resize_finished_total_ms) "
              "VALUES(1," +
              std::to_string(p.n) + "," + std::to_string(p.k) + "," +
              std::to_string(p.load_factor) + "," + std::to_string(p.seed1) +
              "," + std::to_string(p.seed2) + "," + std::to_string(p.seed3) +
-             "," + std::to_string(p.total_bins) + ",0,0,0)");
+             "," + std::to_string(p.total_bins) + ",0,0,0,0,0,0,0,0)");
   }
   return p;
 }
@@ -374,8 +588,8 @@ OpResult HashTableDb::init_table(const TableParams &p) {
     db_.exec(std::string("DROP TABLE IF EXISTS ") + kOldTable);
 
     // 首先构建新的表，然后原子地交换它们。
-    // 这避免了在初始化失败中途 (例如由于 max_allowed_packet, 超时) 丢失现有数据。
-    // 由于 max_allowed_packet, 超时)。
+    // 这避免了在初始化失败中途 (例如由于 max_allowed_packet, 超时)
+    // 丢失现有数据。 由于 max_allowed_packet, 超时)。
     db_.exec("DROP TABLE IF EXISTS hash_table_new");
     // 简化模式中没有 key_slots。
 
@@ -403,7 +617,8 @@ OpResult HashTableDb::init_table(const TableParams &p) {
     // 我们必须稳健地处理 3 种状态:
     // - 两个 live 表都存在
     // - 都不存在 (fresh DB)
-    // - 只有一个存在 (部分/损坏的状态)。在这种情况下，删除现有的一个然后交换 in。
+    // - 只有一个存在 (部分/损坏的状态)。在这种情况下，删除现有的一个然后交换
+    // in。
     auto table_exists = [&](const char *name) -> bool {
       auto cnt =
           db_.select_one_u64("SELECT COUNT(*) FROM information_schema.tables "
@@ -432,7 +647,10 @@ OpResult HashTableDb::init_table(const TableParams &p) {
 
     // 清除 resize 标志并持久化当前 total_bins。
     db_.exec("UPDATE ht_meta SET total_bins=" + std::to_string(p.total_bins) +
-             ", is_resizing=0, new_total_bins=0, resize_progress=0 WHERE id=1");
+             ", is_resizing=0, new_total_bins=0, resize_progress=0, "
+             "resize_started_at_ms=0, resize_migrated_keys=0, "
+             "resize_last_step_ms=0, resize_elapsed_ms=0, "
+             "resize_finished_total_ms=0 WHERE id=1");
 
     r.ok = true;
     return r;
@@ -558,24 +776,53 @@ OpResult HashTableDb::erase_key(const TableParams &p, uint64_t key) {
 
 InsertResult HashTableDb::insert_key(const TableParams &p, uint64_t key,
                                      bool with_trace) {
-  // 在线 resize: 在 resizing 期间我们总是写入 next table 并迁移 1 个 bin 每写操作。
+  // 在线 resize: 在 resizing 期间我们总是写入 next table 并迁移 1 个 bin
+  // 每写操作。
   try {
     db_.begin();
+
     auto m = load_resize_meta_for_update();
+
     if (!m.is_resizing) {
-      // 基于负载开始 resize
-      maybe_start_resize(p, /*trigger_load=*/0.99);
-      db_.commit();
-      return insert_key_into_table(kActiveTable, p, key, with_trace);
+      const double trigger = std::min(0.99, std::max(0.01, p.load_factor));
+      maybe_start_resize(p, /*trigger_load=*/trigger);
+      m = load_resize_meta_for_update();
+      if (m.is_resizing) {
+        db_.commit();
+        db_.begin();
+        m = load_resize_meta_for_update();
+      }
     }
-    // 迁移一个步骤 (在同一个事务中)
-    process_resize_step(p);
-    // 写入 next table 使用 new_total_bins
-    TableParams np = p;
-    np.total_bins = m.new_total_bins;
-    np.capacity_slots = np.total_bins * np.bin_size;
+
+    // If resizing, migrate one bin step before writing.
+    if (m.is_resizing) {
+      process_resize_step(p);
+      m = load_resize_meta_for_update();
+    }
+
+    InsertResult out;
+    if (m.is_resizing) {
+      // Write into next table using new_total_bins.
+      TableParams np = p;
+      np.total_bins = m.new_total_bins;
+      np.total_bins = std::max<uint64_t>(1, np.total_bins);
+      np.capacity_slots = np.total_bins * np.bin_size;
+      out = insert_key_into_table(kNextTable, np, key, with_trace, false);
+    } else {
+      // Write into active table using current total_bins from meta.
+      TableParams ap = p;
+      ap.total_bins =
+          std::max<uint64_t>(1, m.total_bins ? m.total_bins : p.total_bins);
+      ap.capacity_slots = ap.total_bins * ap.bin_size;
+      out = insert_key_into_table(kActiveTable, ap, key, with_trace, false);
+    }
+
+    if (!out.ok) {
+      db_.rollback();
+      return out;
+    }
     db_.commit();
-    return insert_key_into_table(kNextTable, np, key, with_trace);
+    return out;
   } catch (const std::exception &e) {
     try {
       db_.rollback();
@@ -585,6 +832,90 @@ InsertResult HashTableDb::insert_key(const TableParams &p, uint64_t key,
     r.ok = false;
     r.error = e.what();
     return r;
+  }
+}
+
+void HashTableDb::prepare_batch_insert(const TableParams &p,
+                                       uint64_t projected_inserts) {
+  // Heuristic: if projected load would cross trigger, start resize *before*
+  // the batch loop so the first insert writes into next table.
+  try {
+    db_.begin();
+    auto m = load_resize_meta_for_update();
+    if (m.is_resizing) {
+      db_.commit();
+      return;
+    }
+
+    const double trigger = std::min(0.99, std::max(0.01, p.load_factor));
+    auto used = db_.select_one_u64(std::string("SELECT COUNT(*) FROM ") +
+                                   kActiveTable + " WHERE fp<>0");
+    const uint64_t used_now = used.value_or(0);
+    const uint64_t used_proj = used_now + projected_inserts;
+    const double load_proj =
+        p.capacity_slots ? (double)used_proj / (double)p.capacity_slots : 0.0;
+    if (load_proj < trigger) {
+      db_.commit();
+      return;
+    }
+
+    // Start resize and do one step to ensure next table exists.
+    ResizeMeta nm;
+    nm.is_resizing = true;
+    nm.total_bins = p.total_bins;
+    nm.new_total_bins = p.total_bins * 2;
+    nm.resize_progress = 0;
+    store_resize_meta(nm);
+    process_resize_step(p);
+    db_.commit();
+  } catch (...) {
+    try {
+      db_.rollback();
+    } catch (...) {
+    }
+  }
+}
+
+void HashTableDb::resize_to_completion(const TableParams &p) {
+  // Run the online resize loop synchronously until it finishes.
+  //
+  // Design goals:
+  // - Make ht_meta observable quickly (commit after flag flip / after each step)
+  // - Avoid holding one long transaction for the entire resize
+  // - Keep logic simple and deterministic (no background threads)
+  try {
+    db_.begin();
+    auto m = load_resize_meta_for_update();
+
+    // If not resizing yet, decide whether to start.
+    if (!m.is_resizing) {
+      const double trigger = std::min(0.99, std::max(0.01, p.load_factor));
+      maybe_start_resize(p, /*trigger_load=*/trigger);
+      m = load_resize_meta_for_update();
+
+      // If we flipped the flag, commit immediately so other connections can
+      // observe is_resizing=1 before expensive next-table creation.
+      if (m.is_resizing) {
+        db_.commit();
+        db_.begin();
+        m = load_resize_meta_for_update();
+      }
+    }
+
+    // If resizing, keep processing until finish_resize clears the flag.
+    while (m.is_resizing) {
+      process_resize_step(p);
+      db_.commit();
+      db_.begin();
+      m = load_resize_meta_for_update();
+    }
+
+    db_.commit();
+  } catch (...) {
+    try {
+      db_.rollback();
+    } catch (...) {
+    }
   }
 }
 

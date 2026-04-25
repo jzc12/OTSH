@@ -26,7 +26,7 @@ public:
   void exec(const std::string &sql);
 
   // 简单的查询助手 (文本协议)。值作为字符串返回。
-  std::vector<std::vector<std::string>> query(const std::string &sql);
+  std::vector<std::vector<std::string>> query(const std::string &sql) const;
 
   void begin();
   void commit();

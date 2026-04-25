@@ -46,7 +46,7 @@ void Db::exec(const std::string &sql) {
 }
 
 // 执行查询并返回结果
-std::vector<std::vector<std::string>> Db::query(const std::string &sql) {
+std::vector<std::vector<std::string>> Db::query(const std::string &sql) const {
   if (mysql_query(conn_, sql.c_str()) != 0) {
     throw_mysql(conn_, ("query failed: " + sql).c_str());
   }

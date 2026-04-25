@@ -19,35 +19,11 @@
 ## 构建
 
 ```bash
-cmake -S backend-cpp -B backend-cpp/build
 cmake --build backend-cpp/build -j
 ```
-
-## 运行
-
-先确保 MySQL 中有数据库 `otsh`（或用环境变量改名）。
-
-你的环境约束：
-
-- 只能用 `root`
-- `root` 密码为你本机固定值（不要写进仓库），不允许创建新用户
-
-建库（PowerShell）：
-
-```powershell
-& "E:\jzc\MySQL\MySQL Server 8.0\bin\mysql.exe" -uroot -p -e "CREATE DATABASE IF NOT EXISTS otsh;"
-```
-
-环境变量：
-
-- `DB_HOST` `DB_PORT` `DB_USER` `DB_PASSWORD` `DB_NAME`
-- `BIND_HOST`（默认 `0.0.0.0`）
-- `PORT`（默认 `8080`）
-
 启动：
 
 ```powershell
-cd backend-cpp
 $env:DB_PASSWORD="12345678"
 .\build\otsh_backend.exe
 ```

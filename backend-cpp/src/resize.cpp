@@ -1,6 +1,8 @@
 #include "ht.h"
 
 #include <algorithm>
+#include <chrono>
+#include <optional>
 #include <stdexcept>
 
 namespace otsh {
@@ -30,16 +32,48 @@ static bool table_exists(Db &db, const std::string &name) {
 ResizeMeta HashTableDb::load_resize_meta_for_update() {
   // 锁定元数据行，与 store_resize_meta 成对使用，避免并发读写扩容状态
   auto rows =
-      db_.query("SELECT total_bins,is_resizing,new_total_bins,resize_progress "
+      db_.query("SELECT total_bins,is_resizing,new_total_bins,resize_progress,"
+                "resize_started_at_ms,resize_migrated_keys,resize_last_step_ms,"
+                "resize_elapsed_ms,resize_finished_total_ms "
                 "FROM ht_meta WHERE id=1 FOR UPDATE");
-  if (rows.empty() || rows[0].size() < 4)
+  if (rows.empty() || rows[0].size() < 9)
     throw std::runtime_error("ht_meta missing resize columns");
   ResizeMeta m;
   m.total_bins = std::stoull(rows[0][0]);
   m.is_resizing = (std::stoull(rows[0][1]) != 0);
   m.new_total_bins = std::stoull(rows[0][2]);
   m.resize_progress = std::stoull(rows[0][3]);
+  m.started_at_ms = std::stoull(rows[0][4]);
+  m.migrated_keys = std::stoull(rows[0][5]);
+  m.last_step_ms = std::stoull(rows[0][6]);
+  m.elapsed_ms = std::stoull(rows[0][7]);
+  m.finished_total_ms = std::stoull(rows[0][8]);
   return m;
+}
+
+std::optional<ResizeMeta> HashTableDb::read_resize_state_snapshot() const {
+  try {
+    auto rows =
+        db_.query("SELECT total_bins,is_resizing,new_total_bins,resize_progress,"
+                  "resize_started_at_ms,resize_migrated_keys,resize_last_step_ms,"
+                  "resize_elapsed_ms,resize_finished_total_ms "
+                  "FROM ht_meta WHERE id=1");
+    if (rows.empty() || rows[0].size() < 9)
+      return std::nullopt;
+    ResizeMeta m;
+    m.total_bins = std::stoull(rows[0][0]);
+    m.is_resizing = (std::stoull(rows[0][1]) != 0);
+    m.new_total_bins = std::stoull(rows[0][2]);
+    m.resize_progress = std::stoull(rows[0][3]);
+    m.started_at_ms = std::stoull(rows[0][4]);
+    m.migrated_keys = std::stoull(rows[0][5]);
+    m.last_step_ms = std::stoull(rows[0][6]);
+    m.elapsed_ms = std::stoull(rows[0][7]);
+    m.finished_total_ms = std::stoull(rows[0][8]);
+    return m;
+  } catch (...) {
+    return std::nullopt;
+  }
 }
 
 // 存储扩容元数据
@@ -48,7 +82,19 @@ void HashTableDb::store_resize_meta(const ResizeMeta &m) {
            ", is_resizing=" + std::to_string(m.is_resizing ? 1 : 0) +
            ", new_total_bins=" + std::to_string(m.new_total_bins) +
            ", resize_progress=" + std::to_string(m.resize_progress) +
+           ", resize_started_at_ms=" + std::to_string(m.started_at_ms) +
+           ", resize_migrated_keys=" + std::to_string(m.migrated_keys) +
+           ", resize_last_step_ms=" + std::to_string(m.last_step_ms) +
+           ", resize_elapsed_ms=" + std::to_string(m.elapsed_ms) +
+           ", resize_finished_total_ms=" + std::to_string(m.finished_total_ms) +
            " WHERE id=1");
+}
+
+static uint64_t now_ms() {
+  using namespace std::chrono;
+  return (uint64_t)duration_cast<milliseconds>(
+             system_clock::now().time_since_epoch())
+      .count();
 }
 
 // 若当前负载达到 trigger_load 且未在扩容中，则把元数据标为“正在扩容”并
@@ -72,11 +118,16 @@ void HashTableDb::maybe_start_resize(const TableParams &p,
   m.total_bins = p.total_bins;
   m.new_total_bins = p.total_bins * 2;
   m.resize_progress = 0;
+  m.started_at_ms = now_ms();
+  m.migrated_keys = 0;
+  m.last_step_ms = 0;
+  m.elapsed_ms = 0;
+  m.finished_total_ms = 0;
   store_resize_meta(m);
 }
 
-// 若 hash_table_next 不存在则创建，并按 batch 大小批量插入空槽（key NULL, fp=0），
-// 行数 = new_total_bins * bin_size（由调用方通过 capacity_slots 传入）
+// 若 hash_table_next 不存在则创建，并按 batch 大小批量插入空槽（key NULL,
+// fp=0）， 行数 = new_total_bins * bin_size（由调用方通过 capacity_slots 传入）
 static void ensure_next_table(Db &db, uint64_t capacity_slots) {
   if (table_exists(db, kNextTable))
     return;
@@ -118,6 +169,8 @@ void HashTableDb::process_resize_step(const TableParams &p) {
     return;
   }
 
+  const uint64_t t0 = now_ms();
+
   // 当前要迁移的 bin 下标；对应主表中一段连续的 idx 区间
   uint64_t bin_idx = m.resize_progress;
   uint64_t start_idx = bin_idx * p.bin_size;
@@ -140,19 +193,26 @@ void HashTableDb::process_resize_step(const TableParams &p) {
 
     // 按新桶数把 key 插入 next 表；fp 在插入路径里会按 key 重算，这里仅占位
     (void)fp;
-    auto ins = insert_key_into_table(kNextTable, np, key, false);
+    auto ins = insert_key_into_table(kNextTable, np, key, false, false);
     if (!ins.ok)
       throw std::runtime_error("resize migrate insert failed: " + ins.error);
 
     db_.update_slot(kActiveTable, idx, std::nullopt, 0);
   }
 
+  const uint64_t t1 = now_ms();
+  m.last_step_ms = (t1 >= t0) ? (t1 - t0) : 0;
+  m.migrated_keys += static_cast<uint64_t>(rows.size());
+  if (m.started_at_ms != 0 && t1 >= m.started_at_ms)
+    m.elapsed_ms = t1 - m.started_at_ms;
+
   m.resize_progress++;
   store_resize_meta(m);
 }
 
 // 双表 RENAME 原子换名：主表 -> 备份名，next -> 主表，再删备份。MySQL 在同一条
-// RENAME 里交换，避免中间态无主表。随后把扩容标记清掉、total_bins 更新为新的规模。
+// RENAME 里交换，避免中间态无主表。随后把扩容标记清掉、total_bins
+// 更新为新的规模。
 void HashTableDb::finish_resize(const ResizeMeta &m) {
   (void)m;
   db_.exec(std::string("DROP TABLE IF EXISTS ") + kOldTable);
@@ -165,17 +225,12 @@ void HashTableDb::finish_resize(const ResizeMeta &m) {
   nm.total_bins = m.new_total_bins;
   nm.new_total_bins = 0;
   nm.resize_progress = 0;
-  store_resize_meta(nm);
-
-  // 与对外展示的“条数/规模”字段 n 尽量同步：桶翻倍时 n 也翻倍（失败则忽略）
-  try {
-    auto rows = db_.query("SELECT n FROM ht_meta WHERE id=1 FOR UPDATE");
-    if (!rows.empty() && !rows[0].empty()) {
-      uint64_t n = std::stoull(rows[0][0]);
-      db_.exec("UPDATE ht_meta SET n=" + std::to_string(n * 2) + " WHERE id=1");
-    }
-  } catch (...) {
+  const uint64_t t = now_ms();
+  if (nm.started_at_ms != 0 && t >= nm.started_at_ms) {
+    nm.elapsed_ms = t - nm.started_at_ms;
+    nm.finished_total_ms = nm.elapsed_ms;
   }
+  store_resize_meta(nm);
 }
 
 } // namespace otsh

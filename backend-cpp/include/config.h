@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdint>
+#include <stdint.h>
 #include <string>
 
 namespace otsh {
@@ -26,7 +26,7 @@ struct TableParams {
 
   uint64_t mini_bin_size = 0;  // mini-bin 大小
   uint64_t num_mini_bins = 0;  // mini-bin 数量
-  uint64_t fallback_size = 8;  // fallback 大小
+  uint64_t fallback_size = 4;  // fallback 大小
   uint64_t bin_size = 0;       // bin 大小
   uint64_t total_bins = 0;     // 总 bin 数量
   uint64_t capacity_slots = 0; // total_bins * bin_size

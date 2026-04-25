@@ -1,4 +1,17 @@
 CompileFlags:
-  CompilationDatabase: backend-cpp/build
-  Add: [-Ibackend-cpp/include, --gcc-toolchain=E:/jzc/msys/ucrt64]
+  CompilationDatabase: build
+  Add:
+    [
+      -Ibackend-cpp/include,
+      --gcc-toolchain=E:/jzc/msys/ucrt64,
+      --target=x86_64-w64-windows-gnu,
+      --sysroot=E:/jzc/msys/ucrt64,
+    ]
+
+---
+# Headers in this repo are C++ headers; force C++ mode.
+If:
+  PathMatch: .*\\.(h|hpp)$
+CompileFlags:
+  Add: [-x, c++]
 

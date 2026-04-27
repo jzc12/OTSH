@@ -10,7 +10,7 @@ struct ResizeMeta {
   uint64_t new_total_bins = 0;  // 目标 total_bins for hash_table_next
   uint64_t resize_progress = 0; // 迁移的 bins in [0, total_bins]
 
-  // 统计/展示用途（尽量轻量；best-effort，异常时可为 0）
+  // 统计/展示
   uint64_t started_at_ms = 0;     // 扩容开始时间（epoch ms）
   uint64_t migrated_keys = 0;     // 已迁移 key 数（累计）
   uint64_t last_step_ms = 0;      // 最近一步迁移耗时（ms）

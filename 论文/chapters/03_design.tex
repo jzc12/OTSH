@@ -1,0 +1,49 @@
+\chapter{系统总体设计}
+
+\section{总体结构}
+哈希表在逻辑上视为一维槽位数组 \(\mathrm{SLOT}[0\ldots \mathrm{capacity}-1]\)。为控制查询代价并保持空间利用率，本文采用分层组织结构：全局按 bin 划分，再在每个 bin 内划分为若干 mini-bin，并在 bin 尾部设置常数大小的 fallback 区域。整体结构如图~\ref{fig:layout_overview} 所示（本文以逻辑示意为主，具体槽位落库见第 \ref{sec:db_mapping} 节）。\par
+
+\begin{figure}[htbp]
+  \centering
+  \fbox{\parbox{0.92\linewidth}{
+    \vspace{0.6em}
+    \textbf{Bin} = \textbf{MiniBin0}\; \textbf{MiniBin1}\; \(\cdots\)\; \textbf{MiniBin(M-1)} \qquad \textbf{Fallback}
+    \vspace{0.6em}
+  }}
+  \caption{bin / mini-bin / fallback 的逻辑布局示意}
+  \label{fig:layout_overview}
+\end{figure}
+
+\section{参数与派生规则}
+\label{sec:params}
+系统对外暴露的核心参数包括：目标规模 \(n\)、置换深度上界 \(k\)、负载阈值 \(\mathrm{load\_factor}\) 以及三枚哈希种子。其余尺寸由参数派生得到：
+\begin{itemize}
+  \item \textbf{mini-bin 尺寸与数量}：根据设计目标，\(\mathrm{mini\_bin\_size}\) 与 \(\mathrm{num\_mini\_bins}\) 与 \(\log^{(k)} n\) 同阶。工程实现中通过“迭代对数”函数计算基值，并对结果进行 clamp（例如限制在 4 到 64）以避免过小导致结构退化或过大导致区间扫描代价上升。
+  \item \textbf{fallback 大小}：为常数，本文实现固定为 8。
+  \item \textbf{bin 大小}：\(\mathrm{bin\_size}=\mathrm{mini\_bin\_size}\times \mathrm{num\_mini\_bins} + \mathrm{fallback\_size}\)。
+  \item \textbf{总 bin 数与容量}：\(\mathrm{total\_bins}=\left\lceil \frac{n}{\mathrm{bin\_size}}\right\rceil\)，\(\mathrm{capacity\_slots}=\mathrm{total\_bins}\times \mathrm{bin\_size}\)。在线扩容将 \(\mathrm{total\_bins}\) 翻倍并更新元数据。
+\end{itemize}
+
+\section{映射关系与连续区间}
+\label{sec:mapping}
+对任意键 \(x\)，使用两路哈希分别确定其所属 bin 与偏好 mini-bin：
+\[
+  b = h_{\mathrm{bin}}(x) \bmod \mathrm{total\_bins}, \quad
+  m = h_{\mathrm{pref}}(x) \bmod \mathrm{num\_mini\_bins}.
+\]
+在单个 bin 内，以全局连续下标 \(\mathrm{idx}\) 表示槽位位置。记该 bin 的起始偏移 \(\mathrm{offset}=b\times \mathrm{bin\_size}\)，则：
+\begin{itemize}
+  \item 偏好 mini-bin 的区间为 \([\mathrm{offset}+m\cdot \mathrm{mini\_bin\_size},\; \mathrm{offset}+(m+1)\cdot \mathrm{mini\_bin\_size}-1]\)；
+  \item fallback 区间为 \([\mathrm{offset}+\mathrm{mini\_bin\_size}\cdot \mathrm{num\_mini\_bins},\; \mathrm{offset}+\mathrm{bin\_size}-1]\)。
+\end{itemize}
+因此一次查询只需访问上述两个连续区间即可完成验证，探测次数可按“区间扫描次数”统计（详见第 \ref{sec:alg_find} 节）。
+
+\section{指纹与空槽约定}
+每个键 \(x\) 计算 16 位指纹 \(\mathrm{fp}(x)\)，用于快速过滤；系统约定 \(\mathrm{fp}=0\) 表示空槽，因此当计算得到 0 时将其映射为 1。槽位是否为空可由 \(\mathrm{fp}=0\)（且 key 为 NULL）判断。
+
+\section{数据库映射与元数据}
+\label{sec:db_mapping}
+本文将逻辑槽位数组映射为数据库表 \texttt{hash\_table} 的行，使用 \texttt{idx} 作为主键，存储 \texttt{key} 与 \texttt{fp}。为保证键唯一性，在 \texttt{key} 上建立唯一约束。元数据表 \texttt{ht\_meta} 存储 \(n,k,\mathrm{load\_factor}\) 与种子，并持久化 \(\mathrm{total\_bins}\) 以支持在线扩容后的规模维持。\par
+
+在线扩容采用双表迁移：创建 \texttt{hash\_table\_next} 并按 bin 分步迁移，迁移完成后用 \texttt{RENAME TABLE} 原子换表，最后将新的规模写回元数据（详见第 \ref{sec:resize} 节）。
+

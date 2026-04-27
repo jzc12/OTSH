@@ -1,0 +1,149 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% njuthesis 示例模板 v1.4.3 2025-05-21
+% https://github.com/nju-lug/NJUThesis
+%
+% 贡献者
+% Yu XIONG @atxy-blip   Yichen ZHAO @FengChendian
+% Song GAO @myandeg     Chang MA @glatavento
+% Yilun SUN @HermitSun  Yinfeng LIN @linyinfeng
+% Yukai CHOU @Muzimuzhi Liu Dongmiao@liudongmiao
+% Wenrui HUANG @rijuyuezhu
+%
+% 许可证
+% LaTeX Project Public License（版本 1.3c 或更高）
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%---------------------------------------------------------------------
+% 一些提升使用体验的小技巧：
+%   1. 请务必使用 UTF-8 编码编写和保存本文档
+%   2. 请务必使用 XeLaTeX 或 LuaLaTeX 引擎进行编译
+%   3. 不保证接口稳定，写作前一定要留意版本号
+%   4. 以百分号(%)开头的内容为注释，可以随意删除
+%---------------------------------------------------------------------
+
+%---------------------------------------------------------------------
+% 请先阅读使用手册：
+% http://mirrors.ctan.org/macros/unicodetex/latex/njuthesis/njuthesis.pdf
+%---------------------------------------------------------------------
+
+\documentclass[
+    % 模板选项(注意右端逗号)：
+    %
+    type = bachelor,
+    % degree = academic|professional,        % 学位类型，默认为学术型
+    %
+    % nl-cover,   % 是否需要国家图书馆封面，默认关闭
+    % decl-page,  % 是否需要诚信承诺书或原创性声明，默认关闭
+    %
+    %   页面模式，详见手册说明
+    % draft,                  % 开启草稿模式
+    % anonymous,              % 开启盲审模式
+    % minimal,                % 开启最小化模式
+    %
+    %   单双面模式，默认为适合印刷的双面模式
+    oneside,                % 单面模式，无空白页
+    % twoside,                % 双面模式，每一章从奇数页开始
+    %
+    %   字体设置，不填写则自动调用系统预装字体，详见手册
+    % fontset = win|mac|macoffice|fandol|none,
+  ]{njuthesis}
+
+% 模板选项设置，包括个人信息、外观样式等
+% 较为冗长且一般不需要反复修改，我们把它放在单独的文件里
+\input{njuthesis-setup.def}
+
+% 自行载入所需宏包
+% \usepackage{subcaption} % 嵌套小幅图像，比 subfig 和 subfigure 更新更好
+% \usepackage{siunitx} % 标准单位符号
+% \usepackage{physics} % 物理百宝箱
+% \usepackage[version=4]{mhchem} % 绘制分子式
+% \usepackage{listings} % 展示代码
+% \usepackage{algorithm,algorithmic} % 展示算法伪代码
+
+% 在导言区随意定制所需命令
+% \DeclareMathOperator{\spn}{span}
+% \NewDocumentCommand\mathbi{m}{\textbf{\em #1}}
+
+% 开始编写论文
+\begin{document}
+
+%---------------------------------------------------------------------
+%	封面、摘要、前言和目录
+%---------------------------------------------------------------------
+
+% 生成封面页
+\maketitle
+
+% 模板默认使用 \flushbottom，即底部平齐
+% 效果更好，但可能出现 underfull \vbox 信息
+% 以下命令用于抑制这些信息
+\raggedbottom
+
+\begin{abstract}
+  哈希表是高性能存储系统中最基础的数据结构之一。为在高负载下同时获得接近常数的查询代价与较高的空间利用率，本文面向论文《On the Optimal Time/Space Tradeoff for Hash Tables》提出的结构，完成其在工程环境中的复现与系统化实现。该结构以全局分桶（bin）与桶内分块（mini-bin）组织槽位，并为每个桶设置常数大小的回退区（fallback）；对每个键仅需检查“偏好 mini-bin 区间”和“fallback 区间”两段连续下标范围即可完成查询，从而在工程意义上将一次查询约束为 1–2 次区间级探测。为处理冲突，本文实现了有界深度的置换插入（k-kick），在深度超过上界时将元素留在回退区以保证插入过程可终止。
+
+  系统实现采用 MySQL 作为存储与并发控制载体，将槽位映射为以全局下标为主键的关系表行，并存储 64 位键值与 16 位指纹以加速过滤；后端使用 C++20 构建 HTTP 服务，前端基于 Vue 3 提供交互式实验界面，支持初始化、插入、查询、删除、在线扩容以及探针次数、回退占比与踢出深度分布等统计接口。实验与工程实践表明，该实现能够在较高负载因子下保持稳定的查询探测次数，并通过在线扩容机制维持长期运行的可用性。本文工作为理论最优时间/空间折中哈希表在数据库与服务化场景中的工程落地提供了可复现的参考实现与实验支撑。
+\end{abstract}
+
+\begin{abstract*}
+  Hash tables are a fundamental building block in high-performance storage systems. To achieve near-constant lookup cost under high load while maintaining good space efficiency, this thesis reproduces and engineers the core design proposed in *On the Optimal Time/Space Tradeoff for Hash Tables*. The data layout partitions slots into global bins and intra-bin mini-bins, and augments each bin with a constant-size fallback area. For any key, a lookup only scans two contiguous index ranges—the preferred mini-bin segment and the bin’s fallback segment—so a query is bounded to about one to two range-level probes in practice. To resolve collisions during insertion, we implement bounded-depth displacement (k-kick); when the recursion depth exceeds the preset limit, the key is kept in the fallback path to guarantee termination.
+
+  Our system uses MySQL as the persistent storage and concurrency control substrate, representing the logical slot array as table rows keyed by a global index. Each occupied slot stores the full 64-bit key/value and a 16-bit fingerprint for efficient filtering. The backend is a C++20 HTTP service, and the frontend is a Vue 3 application that exposes interactive operations and experiments, including initialization, insert/find/erase, online resizing, and statistics such as probe counts, fallback occupancy, and kick-depth histograms. Empirical results and engineering observations show that the implementation maintains stable lookup probes at high load factors and remains usable over long runs via online resizing. This work provides a reproducible reference implementation and experimental basis for deploying the theoretical time/space optimal hash table in database-backed and service-oriented settings.
+\end{abstract*}
+
+% 生成目录
+\tableofcontents
+% 生成图片清单
+% \listoffigures
+% 生成表格清单
+% \listoftables
+
+%---------------------------------------------------------------------
+%	正文部分
+%---------------------------------------------------------------------
+\mainmatter
+
+% 建议将论文内容拆分为多个文件，按章节组织在 chapters/ 下
+\include{chapters/01_introduction}
+\include{chapters/02_background}
+\include{chapters/03_design}
+\include{chapters/04_implementation}
+\include{chapters/05_experiments}
+\include{chapters/06_conclusion}
+
+%---------------------------------------------------------------------
+%	参考文献
+%---------------------------------------------------------------------
+
+% 生成参考文献页
+\printbibliography
+
+%---------------------------------------------------------------------
+%	致谢
+%---------------------------------------------------------------------
+
+\begin{acknowledgement}
+  感谢 \href{https://git.nju.edu.cn/nju-lug/lug-introduction}{LUG@NJU}。
+\end{acknowledgement}
+
+%---------------------------------------------------------------------
+%	学术简历
+%---------------------------------------------------------------------
+
+% 详见手册中“成果列表”一节
+% \njuchapter{学术成果}
+% \section*{个人简历}
+% \njupaperlist[攻读博士学位期间发表的学术论文]{preskill2018}
+
+%---------------------------------------------------------------------
+%	附录部分
+%---------------------------------------------------------------------
+
+% 附录部分使用单独的字母序号
+\appendix
+
+% 补充材料（接口、表结构、配置等）
+\include{chapters/appendix_api}
+
+% 完工
+\end{document}

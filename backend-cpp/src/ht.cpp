@@ -338,6 +338,20 @@ InsertResult HashTableDb::insert_key_into_table(const std::string &table,
 
     std::vector<size_t> changed;
     changed.reserve(static_cast<size_t>(p.k + 4));
+    std::vector<uint8_t> changed_flag;
+    changed_flag.resize(static_cast<size_t>(p.bin_size), 0);
+
+    auto mark_changed = [&](size_t off) {
+      // `changed` must not contain duplicates; otherwise UPDATE ... CASE idx ...
+      // may emit duplicated WHEN/IN entries, and (worse) MySQL will take the
+      // first matching WHEN, potentially ignoring later in-memory mutations.
+      if (off >= changed_flag.size())
+        return;
+      if (changed_flag[off])
+        return;
+      changed_flag[off] = 1;
+      changed.push_back(off);
+    };
 
     // Case 1: preferred mini-bin has empty slot.
     for (size_t off = mini_off0; off < mini_off1; off++) {
@@ -345,7 +359,7 @@ InsertResult HashTableDb::insert_key_into_table(const std::string &table,
         uint64_t idx = bin_start + static_cast<uint64_t>(off);
         slots[off].fp = fp;
         slots[off].key = key;
-        changed.push_back(off);
+        mark_changed(off);
         if (kick_hist_ && 0 < kick_hist_size_)
           kick_hist_[0].fetch_add(1, std::memory_order_relaxed);
         mark_trace(idx, 0, fp, 0, "place");
@@ -372,7 +386,7 @@ InsertResult HashTableDb::insert_key_into_table(const std::string &table,
       if (victim.fp == 0) {
         victim.fp = cur_fp;
         victim.key = cur_key;
-        changed.push_back(off);
+        mark_changed(off);
         if (kick_hist_ && depth < kick_hist_size_)
           kick_hist_[depth].fetch_add(1, std::memory_order_relaxed);
         mark_trace(idx, 0, cur_fp, static_cast<int>(depth), "place");
@@ -391,7 +405,7 @@ InsertResult HashTableDb::insert_key_into_table(const std::string &table,
 
       victim.fp = cur_fp;
       victim.key = cur_key;
-      changed.push_back(off);
+      mark_changed(off);
       if (kick_hist_ && depth < kick_hist_size_)
         kick_hist_[depth].fetch_add(1, std::memory_order_relaxed);
       mark_trace(idx, ev_fp, cur_fp, static_cast<int>(depth), "kick");
@@ -407,7 +421,7 @@ InsertResult HashTableDb::insert_key_into_table(const std::string &table,
         uint64_t idx = bin_start + static_cast<uint64_t>(off);
         slots[off].fp = cur_fp;
         slots[off].key = cur_key;
-        changed.push_back(off);
+        mark_changed(off);
         if (kick_hist_ && (static_cast<size_t>(p.k + 1) < kick_hist_size_))
           kick_hist_[static_cast<size_t>(p.k + 1)].fetch_add(
               1, std::memory_order_relaxed);
@@ -711,44 +725,6 @@ InsertResult HashTableDb::insert_key(const TableParams &p, uint64_t key,
     r.ok = false;
     r.error = e.what();
     return r;
-  }
-}
-
-void HashTableDb::prepare_batch_insert(const TableParams &p,
-                                       uint64_t projected_inserts) {
-  //////////////////////////// 检查是否需要扩容 ////////////////////////////
-  const double trigger = std::min(0.99, std::max(0.01, p.load_factor));
-  std::lock_guard<std::mutex> lk(resize_mu_);
-
-  auto used = db_.select_one_u64(std::string("SELECT COUNT(*) FROM ") +
-                                 kActiveTable + " WHERE fp<>0");
-  const uint64_t used_now = used.value_or(0);
-  const uint64_t used_proj = used_now + projected_inserts;
-  const double load_proj =
-      p.capacity_slots ? (double)used_proj / (double)p.capacity_slots : 0.0;
-  if (load_proj < trigger)
-    return;
-
-  //////////////////////////// 执行扩容 ////////////////////////////
-  resize_to_completion(p);
-}
-
-void HashTableDb::resize_to_completion(const TableParams &p) {
-  //////////////////////////// 检查是否需要扩容 ////////////////////////////
-  resize_state_ = ResizeMeta{};
-  resize_state_.is_resizing = true;
-  resize_state_.total_bins = p.total_bins;
-  resize_state_.new_total_bins = std::max<uint64_t>(1, p.total_bins * 2);
-  resize_state_.resize_progress = 0;
-
-  //////////////////////////// 逐步迁移所有桶 ////////////////////////////
-  while (resize_state_.is_resizing &&
-         resize_state_.resize_progress < resize_state_.total_bins) {
-    process_resize_step(p);
-  }
-  if (resize_state_.is_resizing) {
-    finish_resize(p, resize_state_);
-    resize_state_.is_resizing = false;
   }
 }
 

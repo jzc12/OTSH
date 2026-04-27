@@ -1,0 +1,32 @@
+\chapter{接口与实现补充材料}
+
+\section{主要 HTTP API}
+本文系统通过 HTTP 提供操作与实验接口，典型接口如下（具体字段以实现为准）：
+\begin{itemize}
+  \item \textbf{健康检查}：\texttt{GET /health}，返回 \texttt{ok}；
+  \item \textbf{初始化}：\texttt{POST /api/init}，请求体包含 \texttt{n, k, load\_factor}（可选 \texttt{seed1/2/3}），返回派生参数（\texttt{mini\_bin\_size, num\_mini\_bins, bin\_size, total\_bins, capacity\_slots} 等）；
+  \item \textbf{单键插入}：\texttt{POST /api/insert}，请求体 \texttt{\{key, trace?\}}，返回 \texttt{ok, probes, fp, bin, mini}，当 \texttt{trace=true} 时返回踢出链步骤；
+  \item \textbf{单键查询}：\texttt{POST /api/find}，请求体 \texttt{\{key\}}，返回 \texttt{found, probes}；
+  \item \textbf{单键删除}：\texttt{POST /api/erase}，请求体 \texttt{\{key\}}，返回 \texttt{ok, probes}；
+  \item \textbf{统计}：\texttt{GET /api/stats}，返回 \texttt{used\_slots, fallback\_used, capacity\_slots, load\_factor}，以及扩容状态摘要；
+  \item \textbf{bin 统计}：\texttt{GET /api/bins?start=\dots\&count=\dots}；
+  \item \textbf{结构快照}：\texttt{GET /api/snapshot?bin\_start=\dots\&bin\_count=\dots}；
+  \item \textbf{查询测试}：\texttt{POST /api/query\_test}，返回 \texttt{avg\_probes, p99\_probes, max\_probes}；
+  \item \textbf{实验接口}：\texttt{/api/experiment/kick\_depth\_hist}、\texttt{/api/experiment/probe\_vs\_n}、\texttt{/api/experiment/fallback\_vs\_load}。
+\end{itemize}
+
+\section{数据库表结构}
+主槽位表使用全局下标作为主键，空槽用 \texttt{fp=0} 与 \texttt{key=NULL} 表示；\texttt{key} 列具有唯一约束以避免重复键。\par
+
+\begin{verbatim}
+CREATE TABLE hash_table (
+  idx BIGINT PRIMARY KEY,
+  key BIGINT UNSIGNED NULL,
+  fp  SMALLINT UNSIGNED NOT NULL,
+  UNIQUE KEY uk_key (key)
+);
+\end{verbatim}
+
+\section{运行配置}
+后端通过环境变量读取数据库连接信息与服务端口等配置，例如：\texttt{DB\_HOST, DB\_PORT, DB\_USER, DB\_PASSWORD, DB\_NAME}，服务端口由 \texttt{PORT} 指定；可选 \texttt{LOG\_FILE} 输出日志文件。
+

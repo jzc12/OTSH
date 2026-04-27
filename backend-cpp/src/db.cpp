@@ -14,13 +14,16 @@ static void throw_mysql(st_mysql *conn, const char *prefix) {
   throw std::runtime_error(msg);
 }
 
+// 构造函数
 Db::Db(DbConfig cfg) : cfg_(std::move(cfg)) {}
 
+// 析构函数
 Db::~Db() {
   if (conn_)
     mysql_close(conn_);
 }
 
+// 连接数据库
 void Db::connect() {
   conn_ = mysql_init(nullptr);
   if (!conn_)
@@ -35,6 +38,7 @@ void Db::connect() {
   }
 }
 
+// 执行 SQL 语句
 void Db::exec(const std::string &sql) {
   if (mysql_query(conn_, sql.c_str()) != 0) {
     throw_mysql(conn_, ("query failed: " + sql).c_str());
@@ -73,6 +77,7 @@ std::vector<std::vector<std::string>> Db::query(const std::string &sql) const {
   return rows;
 }
 
+// 事务
 void Db::begin() { exec("START TRANSACTION"); }
 void Db::commit() { exec("COMMIT"); }
 void Db::rollback() { exec("ROLLBACK"); }

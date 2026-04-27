@@ -1,0 +1,303 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.3 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated by
+% biber as required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+
+\refsection{0}
+  \datalist[entry]{none/global//global/global/global}
+    \entry{pagh2021otsh}{article}{}{}
+      \name{author}{3}{}{%
+        {{hash=88974e5158546cc2704aa597baa5ac09}{%
+           family={Pagh},
+           familyi={P\bibinitperiod},
+           given={Rasmus},
+           giveni={R\bibinitperiod}}}%
+        {{hash=1cc8a7c1cd73e56efcd99c6f098894ca}{%
+           family={Seidel},
+           familyi={S\bibinitperiod},
+           given={Thomas},
+           giveni={T\bibinitperiod}}}%
+        {{hash=bc24aebbfea9fc0a6ce9a09af5db64c6}{%
+           family={Wieder},
+           familyi={W\bibinitperiod},
+           given={Udi},
+           giveni={U\bibinitperiod}}}%
+      }
+      \name{namea}{3}{}{%
+        {{hash=88974e5158546cc2704aa597baa5ac09}{%
+           family={Pagh},
+           familyi={P\bibinitperiod},
+           given={Rasmus},
+           giveni={R\bibinitperiod}}}%
+        {{hash=1cc8a7c1cd73e56efcd99c6f098894ca}{%
+           family={Seidel},
+           familyi={S\bibinitperiod},
+           given={Thomas},
+           giveni={T\bibinitperiod}}}%
+        {{hash=bc24aebbfea9fc0a6ce9a09af5db64c6}{%
+           family={Wieder},
+           familyi={W\bibinitperiod},
+           given={Udi},
+           giveni={U\bibinitperiod}}}%
+      }
+      \list{language}{1}{%
+        {english}%
+      }
+      \strng{namehash}{32c81af526aaa4583757f7d77c2d6b00}
+      \strng{fullhash}{9283fc3f1ba52af17940db6678524635}
+      \strng{fullhashraw}{9283fc3f1ba52af17940db6678524635}
+      \strng{bibnamehash}{9283fc3f1ba52af17940db6678524635}
+      \strng{authorbibnamehash}{9283fc3f1ba52af17940db6678524635}
+      \strng{authornamehash}{32c81af526aaa4583757f7d77c2d6b00}
+      \strng{authorfullhash}{9283fc3f1ba52af17940db6678524635}
+      \strng{authorfullhashraw}{9283fc3f1ba52af17940db6678524635}
+      \strng{nameabibnamehash}{9283fc3f1ba52af17940db6678524635}
+      \strng{nameanamehash}{32c81af526aaa4583757f7d77c2d6b00}
+      \strng{nameafullhash}{9283fc3f1ba52af17940db6678524635}
+      \strng{nameafullhashraw}{9283fc3f1ba52af17940db6678524635}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{Proceedings of the ACM on Management of Data}
+      \field{langid}{english}
+      \field{languageid}{english}
+      \field{lansortorder}{4}
+      \field{title}{On the Optimal Time/Space Tradeoff for Hash Tables}
+      \field{usera}{J}
+      \field{userd}{english}
+      \field{userf}{english}
+      \field{year}{2021}
+      \field{dateera}{ce}
+      \keyw{pagh2021otsh}
+    \endentry
+    \entry{mysqlmanual}{online}{}{}
+      \name{author}{1}{}{%
+        {{hash=30162ed78b6c10f731411f2fc440c24f}{%
+           family={{Oracle}},
+           familyi={O\bibinitperiod}}}%
+      }
+      \name{namea}{1}{}{%
+        {{hash=30162ed78b6c10f731411f2fc440c24f}{%
+           family={{Oracle}},
+           familyi={O\bibinitperiod}}}%
+      }
+      \list{language}{1}{%
+        {english}%
+      }
+      \strng{namehash}{30162ed78b6c10f731411f2fc440c24f}
+      \strng{fullhash}{30162ed78b6c10f731411f2fc440c24f}
+      \strng{fullhashraw}{30162ed78b6c10f731411f2fc440c24f}
+      \strng{bibnamehash}{30162ed78b6c10f731411f2fc440c24f}
+      \strng{authorbibnamehash}{30162ed78b6c10f731411f2fc440c24f}
+      \strng{authornamehash}{30162ed78b6c10f731411f2fc440c24f}
+      \strng{authorfullhash}{30162ed78b6c10f731411f2fc440c24f}
+      \strng{authorfullhashraw}{30162ed78b6c10f731411f2fc440c24f}
+      \strng{nameabibnamehash}{30162ed78b6c10f731411f2fc440c24f}
+      \strng{nameanamehash}{30162ed78b6c10f731411f2fc440c24f}
+      \strng{nameafullhash}{30162ed78b6c10f731411f2fc440c24f}
+      \strng{nameafullhashraw}{30162ed78b6c10f731411f2fc440c24f}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{langid}{english}
+      \field{languageid}{english}
+      \field{lansortorder}{4}
+      \field{title}{MySQL Reference Manual}
+      \field{urlday}{27}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{usera}{A}
+      \field{userd}{english}
+      \field{userf}{english}
+      \field{year}{2026}
+      \field{dateera}{ce}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://dev.mysql.com/doc/
+      \endverb
+      \verb{url}
+      \verb https://dev.mysql.com/doc/
+      \endverb
+      \keyw{mysqlmanual}
+    \endentry
+    \entry{cpphttplib}{online}{}{}
+      \name{author}{1}{}{%
+        {{hash=878a2a65f75e4397559673692060f491}{%
+           family={Hiraoka},
+           familyi={H\bibinitperiod},
+           given={Yutaka},
+           giveni={Y\bibinitperiod}}}%
+      }
+      \name{namea}{1}{}{%
+        {{hash=878a2a65f75e4397559673692060f491}{%
+           family={Hiraoka},
+           familyi={H\bibinitperiod},
+           given={Yutaka},
+           giveni={Y\bibinitperiod}}}%
+      }
+      \list{language}{1}{%
+        {english}%
+      }
+      \strng{namehash}{878a2a65f75e4397559673692060f491}
+      \strng{fullhash}{878a2a65f75e4397559673692060f491}
+      \strng{fullhashraw}{878a2a65f75e4397559673692060f491}
+      \strng{bibnamehash}{878a2a65f75e4397559673692060f491}
+      \strng{authorbibnamehash}{878a2a65f75e4397559673692060f491}
+      \strng{authornamehash}{878a2a65f75e4397559673692060f491}
+      \strng{authorfullhash}{878a2a65f75e4397559673692060f491}
+      \strng{authorfullhashraw}{878a2a65f75e4397559673692060f491}
+      \strng{nameabibnamehash}{878a2a65f75e4397559673692060f491}
+      \strng{nameanamehash}{878a2a65f75e4397559673692060f491}
+      \strng{nameafullhash}{878a2a65f75e4397559673692060f491}
+      \strng{nameafullhashraw}{878a2a65f75e4397559673692060f491}
+      \field{sortinit}{3}
+      \field{sortinithash}{ad6fe7482ffbd7b9f99c9e8b5dccd3d7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{langid}{english}
+      \field{languageid}{english}
+      \field{lansortorder}{4}
+      \field{title}{cpp-httplib}
+      \field{urlday}{27}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{usera}{EB}
+      \field{userd}{english}
+      \field{userf}{english}
+      \field{year}{2026}
+      \field{dateera}{ce}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://github.com/yhirose/cpp-httplib
+      \endverb
+      \verb{url}
+      \verb https://github.com/yhirose/cpp-httplib
+      \endverb
+      \keyw{cpphttplib}
+    \endentry
+    \entry{nlohmannjson}{online}{}{}
+      \name{author}{1}{}{%
+        {{hash=040508666b430e19425dd0c986e56caa}{%
+           family={Lohmann},
+           familyi={L\bibinitperiod},
+           given={Niels},
+           giveni={N\bibinitperiod}}}%
+      }
+      \name{namea}{1}{}{%
+        {{hash=040508666b430e19425dd0c986e56caa}{%
+           family={Lohmann},
+           familyi={L\bibinitperiod},
+           given={Niels},
+           giveni={N\bibinitperiod}}}%
+      }
+      \list{language}{1}{%
+        {english}%
+      }
+      \strng{namehash}{040508666b430e19425dd0c986e56caa}
+      \strng{fullhash}{040508666b430e19425dd0c986e56caa}
+      \strng{fullhashraw}{040508666b430e19425dd0c986e56caa}
+      \strng{bibnamehash}{040508666b430e19425dd0c986e56caa}
+      \strng{authorbibnamehash}{040508666b430e19425dd0c986e56caa}
+      \strng{authornamehash}{040508666b430e19425dd0c986e56caa}
+      \strng{authorfullhash}{040508666b430e19425dd0c986e56caa}
+      \strng{authorfullhashraw}{040508666b430e19425dd0c986e56caa}
+      \strng{nameabibnamehash}{040508666b430e19425dd0c986e56caa}
+      \strng{nameanamehash}{040508666b430e19425dd0c986e56caa}
+      \strng{nameafullhash}{040508666b430e19425dd0c986e56caa}
+      \strng{nameafullhashraw}{040508666b430e19425dd0c986e56caa}
+      \field{sortinit}{4}
+      \field{sortinithash}{9381316451d1b9788675a07e972a12a7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{langid}{english}
+      \field{languageid}{english}
+      \field{lansortorder}{4}
+      \field{title}{JSON for Modern C++}
+      \field{urlday}{27}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{usera}{EB}
+      \field{userd}{english}
+      \field{userf}{english}
+      \field{year}{2026}
+      \field{dateera}{ce}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://github.com/nlohmann/json
+      \endverb
+      \verb{url}
+      \verb https://github.com/nlohmann/json
+      \endverb
+      \keyw{nlohmannjson}
+    \endentry
+    \entry{vue3}{online}{}{}
+      \name{author}{1}{}{%
+        {{hash=8a55232bebff9c7167f4e450b206da18}{%
+           family={{Vue.js Contributors}},
+           familyi={V\bibinitperiod}}}%
+      }
+      \name{namea}{1}{}{%
+        {{hash=8a55232bebff9c7167f4e450b206da18}{%
+           family={{Vue.js Contributors}},
+           familyi={V\bibinitperiod}}}%
+      }
+      \list{language}{1}{%
+        {english}%
+      }
+      \strng{namehash}{8a55232bebff9c7167f4e450b206da18}
+      \strng{fullhash}{8a55232bebff9c7167f4e450b206da18}
+      \strng{fullhashraw}{8a55232bebff9c7167f4e450b206da18}
+      \strng{bibnamehash}{8a55232bebff9c7167f4e450b206da18}
+      \strng{authorbibnamehash}{8a55232bebff9c7167f4e450b206da18}
+      \strng{authornamehash}{8a55232bebff9c7167f4e450b206da18}
+      \strng{authorfullhash}{8a55232bebff9c7167f4e450b206da18}
+      \strng{authorfullhashraw}{8a55232bebff9c7167f4e450b206da18}
+      \strng{nameabibnamehash}{8a55232bebff9c7167f4e450b206da18}
+      \strng{nameanamehash}{8a55232bebff9c7167f4e450b206da18}
+      \strng{nameafullhash}{8a55232bebff9c7167f4e450b206da18}
+      \strng{nameafullhashraw}{8a55232bebff9c7167f4e450b206da18}
+      \field{sortinit}{5}
+      \field{sortinithash}{20e9b4b0b173788c5dace24730f47d8c}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{langid}{english}
+      \field{languageid}{english}
+      \field{lansortorder}{4}
+      \field{title}{Vue.js Documentation}
+      \field{urlday}{27}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{usera}{EB}
+      \field{userd}{english}
+      \field{userf}{english}
+      \field{year}{2026}
+      \field{dateera}{ce}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://vuejs.org/
+      \endverb
+      \verb{url}
+      \verb https://vuejs.org/
+      \endverb
+      \keyw{vue3}
+    \endentry
+  \enddatalist
+\endrefsection
+\endinput
+

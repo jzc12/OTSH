@@ -1,17 +1,19 @@
 #include "http_server.h"
 
-#include <httplib.h>
-#include <nlohmann/json.hpp>
-
+#include "db.h"
+#include "ht.h"
 #include <algorithm>
 #include <chrono>
 #include <ctime>
 #include <fstream>
+#include <httplib.h>
 #include <iomanip>
 #include <iostream>
 #include <mutex>
+#include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <string>
+
 
 namespace otsh {
 
@@ -324,98 +326,114 @@ int run_server(const DbConfig &db_cfg, const ServerConfig &srv_cfg) {
   // key_space?, skew? , with_trace? }
   app.Post("/api/batch_insert", [&](const httplib::Request &req,
                                     httplib::Response &res) {
-    //////////////////////////// 参数解析 ////////////////////////////
-    json in = json::parse(req.body.empty() ? "{}" : req.body);
-    uint64_t count = j_u64(in, "count", 1000);
-    count = std::min<uint64_t>(count, 200000);
-    std::string dist = in.contains("distribution")
-                           ? in["distribution"].get<std::string>()
-                           : "uniform";
-    uint64_t key_space = j_u64(in, "key_space", 0);
-    if (key_space == 0)
-      key_space = count * 10;
-    double skew = j_d(in, "skew", 1.2);
+    const auto t_req0 = std::chrono::high_resolution_clock::now();
+    try {
+      //////////////////////////// 参数解析 ////////////////////////////
+      json in = json::parse(req.body.empty() ? "{}" : req.body);
+      uint64_t count = j_u64(in, "count", 1000);
+      count = std::min<uint64_t>(count, 200000);
+      std::string dist = in.contains("distribution")
+                             ? in["distribution"].get<std::string>()
+                             : "uniform";
+      uint64_t key_space = j_u64(in, "key_space", 0);
+      if (key_space == 0)
+        key_space = count * 10;
+      double skew = j_d(in, "skew", 1.2);
 
-    auto p = ht.load_or_init_meta(100000, 2, 0.98, std::nullopt, std::nullopt,
-                                  std::nullopt);
-    log.info("batch_insert start count=", count, " dist=", dist,
-             " key_space=", key_space, " skew=", skew);
-
-    //////////////////////////// 准备批量插入 ////////////////////////////
-    ht.prepare_batch_insert(p, count);
-    p = ht.load_or_init_meta(10000, 2, 0.98, std::nullopt, std::nullopt,
-                             std::nullopt);
-
-    // generate keys
-    uint64_t seed = j_u64(in, "seed", 0);
-    if (seed == 0)
-      seed = p.seed2 ^ 0xBADC0FFEEULL;
-    uint64_t ok = 0;
-    uint64_t probes = 0;
-    uint64_t max_depth = 0;
-
-    auto t0 = std::chrono::high_resolution_clock::now();
-
-    //////////////////////////// 随机数生成器与插入逻辑
-    ///////////////////////////////
-    for (uint64_t i = 0; i < count; i++) {
-      uint64_t key;
-      if (dist == "skewed") {
-        uint64_t r = splitmix64(seed + i) % key_space;
-        double u = (double)(splitmix64(seed ^ (i + 17)) & 0xFFFFFFFFu) /
-                   (double)0x100000000ULL;
-        double x = std::pow(std::max(1e-12, u), -skew);
-        key = (static_cast<uint64_t>(x) + r) % key_space;
-      } else {
-        key = splitmix64(seed + i) % key_space;
+      // require initialized table
+      auto exists = db.select_one_u64(
+          "SELECT COUNT(*) FROM information_schema.tables "
+          "WHERE table_schema=DATABASE() AND table_name='hash_table'");
+      if (!exists.has_value() || *exists == 0) {
+        respond_json(res, json{{"ok", false}, {"error", "not_initialized"}},
+                     400);
+        return;
       }
 
-      auto r = ht.insert_key(p, key, false);
-      probes += r.probes;
-      ok += r.ok ? 1 : 0;
-      for (auto &s : r.trace)
-        (void)s;
+      auto p = ht.load_or_init_meta(100000, 2, 0.98, std::nullopt, std::nullopt,
+                                    std::nullopt);
+      log.info("batch_insert start count=", count, " dist=", dist,
+               " key_space=", key_space, " skew=", skew);
 
-      if ((i + 1) % 5000 == 0) {
-        log.info("batch_insert progress ", (i + 1), "/", count, " ok=", ok);
+      //////////////////////////// 准备批量插入（可能触发扩容）
+      ///////////////////////////////
+      ht.prepare_batch_insert(p, count);
+      // 扩容可能更新了 ht_meta.n/total_bins，因此需要重新加载参数。
+      p = ht.load_or_init_meta(100000, 2, 0.98, std::nullopt, std::nullopt,
+                               std::nullopt);
+
+      // generate keys
+      uint64_t seed = j_u64(in, "seed", 0);
+      if (seed == 0)
+        seed = p.seed2 ^ 0xBADC0FFEEULL;
+      uint64_t ok = 0;
+      uint64_t probes = 0;
+      uint64_t max_depth = 0;
+
+      auto t0 = std::chrono::high_resolution_clock::now();
+      for (uint64_t i = 0; i < count; i++) {
+        uint64_t key;
+        if (dist == "skewed") {
+          uint64_t r = splitmix64(seed + i) % key_space;
+          double u = (double)(splitmix64(seed ^ (i + 17)) & 0xFFFFFFFFu) /
+                     (double)0x100000000ULL;
+          double x = std::pow(std::max(1e-12, u), -skew);
+          key = (static_cast<uint64_t>(x) + r) % key_space;
+        } else {
+          key = splitmix64(seed + i) % key_space;
+        }
+
+        auto r = ht.insert_key(p, key, false);
+        probes += r.probes;
+        ok += r.ok ? 1 : 0;
+        for (auto &s : r.trace)
+          (void)s;
+
+        if ((i + 1) % 5000 == 0) {
+          log.info("batch_insert progress ", (i + 1), "/", count, " ok=", ok);
+        }
       }
+      auto t1 = std::chrono::high_resolution_clock::now();
+      auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0)
+                    .count();
+
+      // reload meta so n/total_bins reflect any resize + persist to ht_meta
+      p = ht.load_or_init_meta(100000, 2, 0.98, std::nullopt, std::nullopt,
+                               std::nullopt);
+      auto st = ht.stats(p);
+      (void)ht.bin_stats(p, 0, std::min<uint64_t>(p.total_bins, 2000));
+
+      json out;
+      out["ok_count"] = ok;
+      out["total"] = count;
+      out["avg_probes"] = count ? (double)probes / (double)count : 0.0;
+      out["elapsed_ms"] = ms;
+      out["used_slots"] = st.used_slots;
+      out["fallback_used"] = st.fallback_used;
+      out["params"] = {
+          {"n", p.n},
+          {"k", p.k},
+          {"load_factor", p.load_factor},
+          {"mini_bin_size", p.mini_bin_size},
+          {"num_mini_bins", p.num_mini_bins},
+          {"fallback_size", p.fallback_size},
+          {"bin_size", p.bin_size},
+          {"total_bins", p.total_bins},
+          {"capacity_slots", p.capacity_slots},
+      };
+      (void)max_depth;
+      log.info("batch_insert done ok=", ok, "/", count,
+               " avg_probes=", (count ? (double)probes / (double)count : 0.0),
+               " elapsed_ms=", ms, " used=", st.used_slots,
+               " fallback_used=", st.fallback_used, " req_ms=",
+               std::chrono::duration_cast<std::chrono::milliseconds>(
+                   std::chrono::high_resolution_clock::now() - t_req0)
+                   .count());
+      res.set_content(out.dump(), "application/json");
+    } catch (const std::exception &e) {
+      log.error("batch_insert exception: ", e.what());
+      respond_json(res, json{{"ok", false}, {"error", e.what()}}, 500);
     }
-
-    //////////////////////////// 统计结果 ////////////////////////////
-    auto t1 = std::chrono::high_resolution_clock::now();
-    auto ms =
-        std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
-
-    // reload meta so n/total_bins reflect any resize + persist to ht_meta
-    p = ht.load_or_init_meta(100000, 2, 0.98, std::nullopt, std::nullopt,
-                             std::nullopt);
-    auto st = ht.stats(p);
-    (void)ht.bin_stats(p, 0, std::min<uint64_t>(p.total_bins, 2000));
-
-    json out;
-    out["ok_count"] = ok;
-    out["total"] = count;
-    out["avg_probes"] = count ? (double)probes / (double)count : 0.0;
-    out["elapsed_ms"] = ms;
-    out["used_slots"] = st.used_slots;
-    out["fallback_used"] = st.fallback_used;
-    out["params"] = {
-        {"n", p.n},
-        {"k", p.k},
-        {"load_factor", p.load_factor},
-        {"mini_bin_size", p.mini_bin_size},
-        {"num_mini_bins", p.num_mini_bins},
-        {"fallback_size", p.fallback_size},
-        {"bin_size", p.bin_size},
-        {"total_bins", p.total_bins},
-        {"capacity_slots", p.capacity_slots},
-    };
-    (void)max_depth;
-    log.info("batch_insert done ok=", ok, "/", count,
-             " avg_probes=", (count ? (double)probes / (double)count : 0.0),
-             " elapsed_ms=", ms, " used=", st.used_slots,
-             " fallback_used=", st.fallback_used);
-    res.set_content(out.dump(), "application/json");
   });
 
   // POST /api/query_test { count, hit_rate }
@@ -660,17 +678,16 @@ int run_server(const DbConfig &db_cfg, const ServerConfig &srv_cfg) {
         {"load_factor", p.capacity_slots
                             ? (double)s.used_slots / (double)p.capacity_slots
                             : 0.0},
-        {"resize",
-         rz ? json{{"is_resizing", rz->is_resizing},
-                   {"resize_progress", rz->resize_progress},
-                   {"total_bins", rz->total_bins},
-                   {"new_total_bins", rz->new_total_bins},
-                   {"started_at_ms", rz->started_at_ms},
-                   {"migrated_keys", rz->migrated_keys},
-                   {"last_step_ms", rz->last_step_ms},
-                   {"elapsed_ms", rz->elapsed_ms},
-                   {"finished_total_ms", rz->finished_total_ms}}
-            : json{{"is_resizing", false}}},
+        {"resize", rz ? json{{"is_resizing", rz->is_resizing},
+                             {"resize_progress", rz->resize_progress},
+                             {"total_bins", rz->total_bins},
+                             {"new_total_bins", rz->new_total_bins},
+                             {"started_at_ms", rz->started_at_ms},
+                             {"migrated_keys", rz->migrated_keys},
+                             {"last_step_ms", rz->last_step_ms},
+                             {"elapsed_ms", rz->elapsed_ms},
+                             {"finished_total_ms", rz->finished_total_ms}}
+                      : json{{"is_resizing", false}}},
         {"params",
          {{"n", p.n},
           {"mini_bin_size", p.mini_bin_size},

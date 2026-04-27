@@ -16,7 +16,7 @@ namespace otsh {
 
 struct OpResult {
   bool ok = false;
-  uint64_t probes = 0; // number of SQL range scans (mini-bin + fallback)
+  uint64_t probes = 0; // SQL 范围扫描次数（mini-bin + fallback）
   std::string error;
 };
 
@@ -36,7 +36,8 @@ struct KickStep {
   uint16_t from_fp = 0;
   uint16_t to_fp = 0;
   int depth = 0;
-  std::string action; // "place" | "kick" | "fallback_add" | "fallback_remove"
+  std::string action; // "place" | "kick" | "fallback_add" |
+                      // "fallback_remove"（动作类型）
 };
 
 struct InsertResult : OpResult {
@@ -60,19 +61,19 @@ public:
   OpResult find_key(const TableParams &p, uint64_t key);
   OpResult erase_key(const TableParams &p, uint64_t key);
 
-  // Best-effort: for batch inserts, pre-check projected load and start resize
-  // early so the batch can directly write to `hash_table_next`.
-  // `projected_inserts` is an estimate; duplicates are fine.
+  // 尽力而为：批量插入前，预检查预计负载并提前触发扩容，
+  // 使该批次可以直接写入 `hash_table_next`。
+  // `projected_inserts` 为估算值；包含重复 key 也没问题。
   void prepare_batch_insert(const TableParams &p, uint64_t projected_inserts);
 
-  // Synchronous resize: when load reaches trigger, pause the caller's work,
-  // run resize steps until finished, then return.
-  // This matches a simple single-threaded control flow:
-  //   insert... -> detect threshold -> resize_to_completion() -> resume
+  // 同步扩容：当负载达到触发阈值时，暂停调用方当前工作，
+  // 执行扩容步骤直到完成后再返回。
+  // 这对应简单的单线程控制流：
+  //   insert... -> 检测阈值 -> resize_to_completion() -> 继续
   //   insert...
   void resize_to_completion(const TableParams &p);
 
-  // Kick depth histogram (in-memory only, cleared on init/rebuild).
+  // Kick 深度直方图（仅内存；init/rebuild 时清空）。
   void reset_kick_hist(int k);
   std::vector<uint64_t> kick_hist_snapshot() const;
 
@@ -80,25 +81,23 @@ public:
   std::vector<BinStats> bin_stats(const TableParams &p, uint64_t bin_start,
                                   uint64_t bin_count);
 
-  // Snapshot for Canvas grid visualization
-  // returns rows: [idx, fp, reserved]
+  // 用于 Canvas 网格可视化的快照
+  // 返回行格式：[idx, fp, reserved]
   std::vector<std::array<uint64_t, 3>>
   snapshot_bins(const TableParams &p, uint64_t bin_start, uint64_t bin_count);
 
-  // Read-only resize metadata from `ht_meta` (no row lock; best-effort for UI
-  // and cooperative waits).
+  // 扩容状态（仅进程内，用于前端展示进度；不写入数据库）。
   std::optional<ResizeMeta> read_resize_state_snapshot() const;
 
 private:
   Db &db_;
 
-  // --- resize state (in-process only; not persisted) ---
+  // --- 扩容状态（仅进程内；不持久化）---
   mutable std::mutex resize_mu_;
   ResizeMeta resize_state_;
 
-  // depth -> count (0..k). We also keep one extra bucket for depth==k+1
-  // (fallback marker). We avoid std::vector<std::atomic<...>> because atomics
-  // are non-movable.
+  // depth -> count（0..k）。另外保留一个桶用于 depth==k+1（fallback 标记）。
+  // 避免使用 std::vector<std::atomic<...>>，因为 atomic 不可移动。
   std::unique_ptr<std::atomic<uint64_t>[]> kick_hist_;
   size_t kick_hist_size_ = 0;
 
@@ -113,14 +112,12 @@ private:
   uint64_t fallback_start(const TableParams &p, uint64_t b) const;
   uint64_t fallback_end(const TableParams &p, uint64_t b) const;
 
-  // --- resize meta/state (persisted in ht_meta) ---
-  ResizeMeta load_resize_meta_for_update();
-  void store_resize_meta(const ResizeMeta &m);
+  // --- 扩容状态（仅进程内；不持久化）---
   void maybe_start_resize(const TableParams &p, double trigger_load);
   void process_resize_step(const TableParams &p);
   void finish_resize(const TableParams &p, const ResizeMeta &m);
 
-  // Transactional operations (all assume caller runs in a transaction)
+  // 事务性操作
   std::optional<uint64_t> claim_empty_slot_in_range(const std::string &table,
                                                     uint64_t start,
                                                     uint64_t end,
@@ -137,8 +134,8 @@ private:
                         uint64_t depth, std::vector<KickStep> *trace,
                         uint64_t *probes);
 
-  // Insert implementation targeting a specific physical table name.
-  // If `manage_txn` is false, caller must already be in a transaction.
+  // 面向指定物理表名的插入实现。
+  // 若 `manage_txn` 为 false，则调用方必须已处于事务中。
   InsertResult insert_key_into_table(const std::string &table,
                                      const TableParams &p, uint64_t key,
                                      bool with_trace, bool manage_txn);

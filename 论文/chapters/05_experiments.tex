@@ -1,0 +1,32 @@
+\chapter{实验设计与结果分析}
+
+\section{实验环境与指标}
+本文实现以数据库为存储与计算载体，实验重点关注“区间扫描次数”意义下的探针代价，并统计结构在不同负载与参数设置下的行为。主要指标包括：
+\begin{itemize}
+  \item \textbf{探针次数}：查询的 \texttt{probes}，定义为对连续 \texttt{idx} 区间进行一次范围扫描计 1 次；
+  \item \textbf{分位探针}：在多次查询测试中统计平均探针、P99 探针与最大探针；
+  \item \textbf{fallback 占比}：fallback 区域已用槽数及其占已用槽的比例；
+  \item \textbf{踢出深度分布}：插入过程中 place/kick 的深度直方图，用于观察 \(k\) 对置换链的影响。
+\end{itemize}
+
+\section{实验一：查询探针与规模关系（probe vs n）}
+该实验通过 \texttt{POST /api/experiment/probe\_vs\_n} 对多组 \(n\) 与 \(k\) 重复执行 “init + 插入 + 查询测试”，输出每个点的平均探针、P99 探针与最大探针。该实验是破坏性的，会反复重建表。\par
+
+\textbf{预期现象}：在固定 load factor 与结构规则下，查询探针受两段区间扫描上界约束，平均探针应接近常数；不同 \(k\) 影响插入时落入 fallback 的比例，从而可能间接影响查询命中分布与探针统计。
+
+\section{实验二：fallback 使用与负载关系（fallback vs load）}
+该实验通过 \texttt{POST /api/experiment/fallback\_vs\_load} 将表逐步填充至多个目标负载（如 0.7、0.8、0.9、0.95、0.98），统计每个阶段的实际 load、fallback 已用槽与 fallback 占比。\par
+
+\textbf{预期现象}：随着负载上升，偏好 mini-bin 更容易被填满，插入置换链更频繁，fallback 作为兜底路径的使用比例上升；在较小 \(k\) 或偏斜分布下，fallback 占比上升更明显。
+
+\section{实验三：踢出深度直方图（kick depth histogram）}
+该实验通过 \texttt{GET /api/experiment/kick\_depth\_hist} 返回插入过程中记录的深度直方图（在 \texttt{/api/init} 时清空）。其中 depth=0 表示直接放入空槽，depth>0 表示发生踢出链；额外桶用于统计“仅落入 fallback”的事件。\par
+
+\textbf{预期现象}：在合理参数下，踢出深度主要集中在较小深度；增大 \(k\) 会延长允许的置换链，减少落入 fallback 的事件，但可能增加插入代价。
+
+\section{查询测试：分位探针统计}
+通过 \texttt{POST /api/query\_test} 可在给定查询次数与命中率配置下执行大量查询，并返回平均探针、P99 与最大探针。该接口可以用于在固定表状态下观察命中/未命中混合查询的尾部行为。\par
+
+\section{结果讨论与局限}
+由于本章目标是形成可编译的论文初稿，本文在初稿阶段先给出实验设计、指标定义与预期现象，并与系统已实现的实验接口一一对齐。后续可直接运行前端实验面板或调用相应 API，导出真实曲线与数据表格，并将本章的“预期现象”替换为“实测结果与分析”。
+

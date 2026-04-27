@@ -78,7 +78,6 @@ function renderKickHist() {
   if (!kickChart) kickChart = echarts.init(kickHistEl.value)
   const hist = props.kickHist ?? []
   kickChart.setOption({
-    title: { text: 'Kick 深度分布', left: 'left' },
     tooltip: { trigger: 'axis' },
     xAxis: { type: 'category', data: hist.map((h) => String(h.depth)) },
     yAxis: { type: 'value' },

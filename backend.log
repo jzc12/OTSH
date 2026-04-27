@@ -98,3 +98,111 @@
 2026-04-25 15:41:30 [INFO] GET /api/snapshot -> 200 (4305 bytes)
 2026-04-25 15:41:30 [INFO] GET /api/experiment/kick_depth_hist -> 200 (66 bytes)
 2026-04-25 15:42:01 [INFO] GET /api/snapshot -> 200 (7021 bytes)
+2026-04-25 15:52:55 [INFO] server starting, bind=0.0.0.0 port=8080 db=root@127.0.0.1:3306/otsh
+2026-04-25 15:53:05 [INFO] server starting, bind=0.0.0.0 port=8080 db=root@127.0.0.1:3306/otsh
+2026-04-25 15:53:22 [INFO] init done ok=1 n=1000 k=2 bins=50 bin_size=20 slots=1000 elapsed_ms=599
+2026-04-25 15:53:22 [INFO] POST /api/init -> 200 (168 bytes)
+2026-04-25 15:53:22 [INFO] GET /api/stats -> 200 (123 bytes)
+2026-04-25 15:53:22 [INFO] GET /api/snapshot -> 200 (1247 bytes)
+2026-04-25 15:53:23 [INFO] GET /api/experiment/kick_depth_hist -> 200 (58 bytes)
+2026-04-25 15:53:25 [INFO] batch_insert start count=1500 dist=uniform key_space=15000 skew=1
+2026-04-25 15:53:41 [INFO] batch_insert done ok=1019/1500 avg_probes=0.964667 elapsed_ms=16183 used=966 fallback_used=191
+2026-04-25 15:53:41 [INFO] POST /api/batch_insert -> 200 (158 bytes)
+2026-04-25 15:53:41 [INFO] GET /api/stats -> 200 (131 bytes)
+2026-04-25 15:53:41 [INFO] GET /api/snapshot -> 200 (3753 bytes)
+2026-04-25 15:53:41 [INFO] GET /api/experiment/kick_depth_hist -> 200 (71 bytes)
+2026-04-25 16:04:15 [INFO] server starting, bind=0.0.0.0 port=8080 db=root@127.0.0.1:3306/otsh
+2026-04-25 16:04:32 [INFO] batch_insert start count=1500 dist=uniform key_space=15000 skew=1
+2026-04-25 16:04:32 [INFO] POST /api/batch_insert -> 500 (0 bytes)
+2026-04-25 16:07:47 [INFO] server starting, bind=0.0.0.0 port=8080 db=root@127.0.0.1:3306/otsh
+2026-04-25 16:07:58 [INFO] init done ok=1 n=1000 k=2 bins=50 bin_size=20 slots=1000 elapsed_ms=462
+2026-04-25 16:07:58 [INFO] POST /api/init -> 200 (163 bytes)
+2026-04-25 16:07:58 [INFO] GET /api/stats -> 200 (123 bytes)
+2026-04-25 16:07:58 [INFO] GET /api/snapshot -> 200 (1247 bytes)
+2026-04-25 16:07:58 [INFO] GET /api/experiment/kick_depth_hist -> 200 (58 bytes)
+2026-04-25 16:08:00 [INFO] batch_insert start count=1500 dist=uniform key_space=15000 skew=1
+2026-04-25 16:08:18 [INFO] batch_insert done ok=1384/1500 avg_probes=0.950667 elapsed_ms=17828 used=1310 fallback_used=109 req_ms=18307
+2026-04-25 16:08:18 [INFO] POST /api/batch_insert -> 200 (158 bytes)
+2026-04-25 16:08:18 [INFO] GET /api/stats -> 200 (132 bytes)
+2026-04-25 16:08:19 [INFO] GET /api/snapshot -> 200 (4282 bytes)
+2026-04-25 16:08:19 [INFO] GET /api/experiment/kick_depth_hist -> 200 (67 bytes)
+2026-04-25 16:10:47 [INFO] init done ok=1 n=1000 k=2 bins=50 bin_size=20 slots=1000 elapsed_ms=685
+2026-04-25 16:10:47 [INFO] POST /api/init -> 200 (166 bytes)
+2026-04-25 16:10:47 [INFO] GET /api/stats -> 200 (123 bytes)
+2026-04-25 16:10:48 [INFO] GET /api/snapshot -> 200 (1247 bytes)
+2026-04-25 16:10:48 [INFO] GET /api/experiment/kick_depth_hist -> 200 (58 bytes)
+2026-04-25 16:10:55 [INFO] batch_insert start count=1500 dist=uniform key_space=15000 skew=1
+2026-04-25 16:11:11 [INFO] batch_insert done ok=1372/1500 avg_probes=0.948667 elapsed_ms=15363 used=1295 fallback_used=82 req_ms=15926
+2026-04-25 16:11:11 [INFO] POST /api/batch_insert -> 200 (159 bytes)
+2026-04-25 16:11:11 [INFO] GET /api/stats -> 200 (133 bytes)
+2026-04-25 16:11:12 [INFO] GET /api/snapshot -> 200 (4195 bytes)
+2026-04-25 16:11:12 [INFO] GET /api/experiment/kick_depth_hist -> 200 (65 bytes)
+2026-04-25 16:12:08 [INFO] POST /api/query_test -> 200 (75 bytes)
+2026-04-25 16:12:14 [INFO] POST /api/query_test -> 200 (75 bytes)
+2026-04-25 17:12:44 [INFO] server starting, bind=0.0.0.0 port=8080 db=root@127.0.0.1:3306/otsh
+2026-04-25 17:13:08 [INFO] init done ok=1 n=1000 k=2 bins=50 bin_size=20 slots=1000 elapsed_ms=484
+2026-04-25 17:13:08 [INFO] POST /api/init -> 200 (165 bytes)
+2026-04-25 17:13:08 [INFO] GET /api/stats -> 200 (123 bytes)
+2026-04-25 17:13:08 [INFO] GET /api/snapshot -> 200 (1247 bytes)
+2026-04-25 17:13:08 [INFO] GET /api/experiment/kick_depth_hist -> 200 (58 bytes)
+2026-04-25 17:13:12 [INFO] batch_insert start count=1500 dist=uniform key_space=15000 skew=1
+2026-04-25 17:13:30 [INFO] batch_insert done ok=1370/1500 avg_probes=0.956 elapsed_ms=17556 used=1304 fallback_used=110 req_ms=17980
+2026-04-25 17:13:30 [INFO] POST /api/batch_insert -> 200 (159 bytes)
+2026-04-25 17:13:30 [INFO] GET /api/stats -> 200 (129 bytes)
+2026-04-25 17:13:31 [INFO] GET /api/snapshot -> 200 (4220 bytes)
+2026-04-25 17:13:31 [INFO] GET /api/experiment/kick_depth_hist -> 200 (69 bytes)
+2026-04-25 17:13:39 [INFO] batch_insert start count=3500 dist=uniform key_space=35000 skew=1
+2026-04-25 17:13:40 [ERROR] batch_insert exception: resize migrate insert failed: query failed: UPDATE hash_table_next SET `key` = CASE idx WHEN 729 THEN 4198 WHEN 730 THEN 12419 WHEN 729 THEN 4198 WHEN 736 THEN 9883 ELSE `key` END, fp = CASE idx WHEN 729 THEN 48141 WHEN 730 THEN 5183 WHEN 729 THEN 48141 WHEN 736 THEN 41596 ELSE fp END WHERE idx IN (729,730,729,736): Duplicate entry '4198' for key 'uk_key'
+2026-04-25 17:13:40 [INFO] POST /api/batch_insert -> 500 (213 bytes)
+2026-04-25 17:17:43 [INFO] server starting, bind=0.0.0.0 port=8080 db=root@127.0.0.1:3306/otsh
+2026-04-25 17:18:07 [INFO] init done ok=1 n=500 k=2 bins=25 bin_size=20 slots=500 elapsed_ms=615
+2026-04-25 17:18:07 [INFO] POST /api/init -> 200 (163 bytes)
+2026-04-25 17:18:07 [INFO] GET /api/stats -> 200 (123 bytes)
+2026-04-25 17:18:07 [INFO] GET /api/snapshot -> 200 (684 bytes)
+2026-04-25 17:18:08 [INFO] GET /api/experiment/kick_depth_hist -> 200 (58 bytes)
+2026-04-25 17:18:15 [INFO] batch_insert start count=300 dist=uniform key_space=3000 skew=1
+2026-04-25 17:18:18 [INFO] batch_insert done ok=285/300 avg_probes=0.94 elapsed_ms=2841 used=267 fallback_used=11 req_ms=2860
+2026-04-25 17:18:18 [INFO] POST /api/batch_insert -> 200 (151 bytes)
+2026-04-25 17:18:18 [INFO] GET /api/stats -> 200 (127 bytes)
+2026-04-25 17:18:18 [INFO] GET /api/snapshot -> 200 (1758 bytes)
+2026-04-25 17:18:19 [INFO] GET /api/experiment/kick_depth_hist -> 200 (67 bytes)
+2026-04-25 17:18:31 [INFO] batch_insert start count=300 dist=uniform key_space=3000 skew=1
+2026-04-25 17:18:32 [INFO] batch_insert done ok=299/300 avg_probes=0.05 elapsed_ms=254 used=281 fallback_used=3 req_ms=909
+2026-04-25 17:18:32 [INFO] POST /api/batch_insert -> 200 (151 bytes)
+2026-04-25 17:18:32 [INFO] GET /api/stats -> 200 (129 bytes)
+2026-04-25 17:18:33 [INFO] GET /api/snapshot -> 200 (2585 bytes)
+2026-04-25 17:18:33 [INFO] GET /api/experiment/kick_depth_hist -> 200 (69 bytes)
+2026-04-25 17:18:43 [INFO] batch_insert start count=600 dist=uniform key_space=6000 skew=1
+2026-04-25 17:18:50 [INFO] batch_insert done ok=587/600 avg_probes=0.711667 elapsed_ms=6436 used=695 fallback_used=13 req_ms=7217
+2026-04-25 17:18:50 [INFO] POST /api/batch_insert -> 200 (157 bytes)
+2026-04-25 17:18:50 [INFO] GET /api/stats -> 200 (133 bytes)
+2026-04-25 17:18:51 [INFO] GET /api/snapshot -> 200 (3353 bytes)
+2026-04-25 17:18:51 [INFO] GET /api/experiment/kick_depth_hist -> 200 (66 bytes)
+2026-04-25 17:19:03 [INFO] batch_insert start count=600 dist=uniform key_space=6000 skew=1
+2026-04-25 17:19:04 [INFO] batch_insert done ok=587/600 avg_probes=0.0216667 elapsed_ms=406 used=695 fallback_used=13 req_ms=476
+2026-04-25 17:19:04 [INFO] POST /api/batch_insert -> 200 (158 bytes)
+2026-04-25 17:19:04 [INFO] GET /api/stats -> 200 (133 bytes)
+2026-04-25 17:19:04 [INFO] GET /api/snapshot -> 200 (3353 bytes)
+2026-04-25 17:19:05 [INFO] GET /api/experiment/kick_depth_hist -> 200 (64 bytes)
+2026-04-25 17:19:47 [INFO] batch_insert start count=3 dist=uniform key_space=30 skew=1
+2026-04-25 17:19:47 [INFO] batch_insert done ok=3/3 avg_probes=0.666667 elapsed_ms=60 used=697 fallback_used=13 req_ms=90
+2026-04-25 17:19:47 [INFO] POST /api/batch_insert -> 200 (153 bytes)
+2026-04-25 17:19:47 [INFO] GET /api/stats -> 200 (133 bytes)
+2026-04-25 17:19:47 [INFO] GET /api/snapshot -> 200 (3347 bytes)
+2026-04-25 17:19:47 [INFO] GET /api/experiment/kick_depth_hist -> 200 (63 bytes)
+2026-04-25 17:19:57 [INFO] batch_insert start count=3 dist=uniform key_space=30 skew=1
+2026-04-25 17:19:57 [INFO] batch_insert done ok=3/3 avg_probes=0 elapsed_ms=1 used=697 fallback_used=13 req_ms=20
+2026-04-25 17:19:57 [INFO] POST /api/batch_insert -> 200 (146 bytes)
+2026-04-25 17:19:57 [INFO] GET /api/stats -> 200 (133 bytes)
+2026-04-25 17:19:57 [INFO] GET /api/snapshot -> 200 (3347 bytes)
+2026-04-25 17:19:57 [INFO] GET /api/experiment/kick_depth_hist -> 200 (63 bytes)
+2026-04-25 17:20:01 [INFO] insert key=1 ok=1 probes=1 trace=4 elapsed_us=71147
+2026-04-25 17:20:01 [INFO] POST /api/insert -> 200 (165 bytes)
+2026-04-25 17:20:02 [INFO] GET /api/stats -> 200 (130 bytes)
+2026-04-25 17:20:02 [INFO] GET /api/snapshot -> 200 (3347 bytes)
+2026-04-25 17:20:02 [INFO] GET /api/experiment/kick_depth_hist -> 200 (66 bytes)
+2026-04-25 17:20:07 [INFO] GET /api/snapshot -> 200 (3347 bytes)
+2026-04-25 17:20:09 [INFO] GET /api/snapshot -> 200 (3347 bytes)
+2026-04-25 17:20:09 [INFO] GET /api/snapshot -> 200 (3347 bytes)
+2026-04-25 17:21:23 [INFO] POST /api/query_test -> 200 (68 bytes)
+2026-04-25 17:21:34 [INFO] POST /api/query_test -> 200 (66 bytes)

@@ -34,13 +34,18 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
+# --- MySQL / MariaDB client (required for mysql storage) ---
+find_path(MYSQL_INCLUDE_DIR mysql.h PATH_SUFFIXES include include/mysql include/mariadb)
+find_library(MYSQL_LIBRARY NAMES mariadb mysqlclient libmariadb libmysql)
+
 add_executable(otsh_backend
   src/main.cpp
   src/http_server.cpp
-  src/db.cpp
   src/hash.cpp
   src/ht.cpp
-  src/resize.cpp
+  src/metrics.cpp
+  src/router.cpp
+  src/storage_mysql.cpp
 )
 
 target_include_directories(otsh_backend PRIVATE
@@ -49,6 +54,13 @@ target_include_directories(otsh_backend PRIVATE
 
 # httplib provides target `httplib::httplib`
 target_link_libraries(otsh_backend PRIVATE httplib::httplib nlohmann_json::nlohmann_json)
+if (NOT MYSQL_INCLUDE_DIR OR NOT MYSQL_LIBRARY)
+  message(FATAL_ERROR "MySQL/MariaDB client headers/libs not found. Set MYSQL_INCLUDE_DIR and MYSQL_LIBRARY.")
+endif()
+
+target_include_directories(otsh_backend PRIVATE ${MYSQL_INCLUDE_DIR})
+target_link_libraries(otsh_backend PRIVATE ${MYSQL_LIBRARY})
+target_compile_definitions(otsh_backend PRIVATE OTSH_HAVE_MYSQL=1)
 
 # Some clang/clangd setups won’t pick up transitive include dirs correctly
 # unless a build directory has generated `compile_commands.json`.
@@ -59,23 +71,6 @@ target_include_directories(otsh_backend PRIVATE
 
 # Editors should point directly at the build dir's compile_commands.json.
 # Copying it to the repo root easily leaves a stale file that clangd may pick up.
-
-# MySQL / MariaDB client library
-# On Windows, ensure you have MariaDB/MySQL client installed and CMake can find the import lib.
-find_path(MYSQL_INCLUDE_DIR mysql.h
-  PATH_SUFFIXES include include/mysql include/mariadb
-)
-
-find_library(MYSQL_LIBRARY
-  NAMES mariadb mysqlclient libmariadb libmysql
-)
-
-if (NOT MYSQL_INCLUDE_DIR OR NOT MYSQL_LIBRARY)
-  message(FATAL_ERROR "Could not find MySQL/MariaDB client headers/libs. Set MYSQL_INCLUDE_DIR and MYSQL_LIBRARY cache vars if needed.")
-endif()
-
-target_include_directories(otsh_backend PRIVATE ${MYSQL_INCLUDE_DIR})
-target_link_libraries(otsh_backend PRIVATE ${MYSQL_LIBRARY})
 
 if (WIN32)
   target_compile_definitions(otsh_backend PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)

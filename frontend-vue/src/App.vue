@@ -5,19 +5,18 @@
         <AppHeader :backend-base="backendBase" />
 
         <section class="layout">
-            <SidebarPanel :busy="blocked" :init-form="initForm" :dist-form="distForm" :batch-form="batchForm"
-                :query-form="queryForm" :params="params" :rt="rt"
+            <SidebarPanel :busy="blocked" :init-form="initForm" :params="params" :rt="rt"
                 :mini-bin-size-display="miniBinSizeDisplay" :fmt-ms="fmtMs" :key-value="key" :op-result="opResult"
+                :snapshots="snapshots" :selected-snapshot-id="selectedSnapshotId"
                 @update:keyValue="setKey" @initTable="initTable" @refreshStats="refreshStats"
-                @refreshKickHist="refreshKickHist" @insertOne="insertOne" @findOne="findOne" @eraseOne="eraseOne"
-                @batchInsert="batchInsert" @queryTest="queryTest" @runFallbackVsLoad="runFallbackVsLoad"
-                @runProbeVsN="runProbeVsN" />
+                @insertOne="insertOne" @findOne="findOne" @eraseOne="eraseOne"
+                @runO1VsN="runO1VsN" @runOkVsK="runOkVsK"
+                @loadSnapshots="loadSnapshots" @dumpStructure="dumpStructure"
+                @update:selectedSnapshotId="setSelectedSnapshot" />
 
             <main class="content">
-                <StructureCard :busy="blocked" :snap-form="snapForm" :snapshot="snapshot" :params="params"
-                    :last-trace-idx="lastTraceIdx" @refreshSnapshot="refreshSnapshot" />
-
-                <ChartsPanel :stats="stats" :history="history" :kick-hist="kickHist" :experiment="experiment" />
+                <ChartsPanel :stats="stats" :history="history" :analytics-db="stats?.analytics_db ?? null"
+                    :experiment="experiment" />
             </main>
         </section>
     </div>
@@ -25,12 +24,11 @@
 
 <script setup lang="ts">
 import axios from 'axios'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import AppHeader from './components/app/AppHeader.vue'
 import BusyOverlay from './components/app/BusyOverlay.vue'
 import ChartsPanel from './components/app/ChartsPanel.vue'
 import SidebarPanel from './components/app/SidebarPanel.vue'
-import StructureCard from './components/app/StructureCard.vue'
 
 const backendBase = 'http://127.0.0.1:8080'
 
@@ -47,38 +45,24 @@ function setKey(v: number) {
     key.value = v
 }
 
+function setSelectedSnapshot(id: number | null) {
+    selectedSnapshotId.value = id
+}
+
 const initForm = ref({
     n: 10000,
     k: 2,
-    load_factor: 0.9,
+    snapshot_tag: 'init',
 })
 
-const distForm = ref({
-    distribution: 'uniform' as 'uniform' | 'skewed',
-})
-
-const batchForm = ref({
-    count: 1500,
-    skew: 1,
-})
-
-const queryForm = ref({
-    count: 1500,
-    hit_rate: 0.5,
-})
-
-const snapForm = ref({
-    bin_start: 0,
-    bin_count: 60,
-})
+const snapshots = ref<any[]>([])
+const selectedSnapshotId = ref<number | null>(null)
 
 const params = ref<any>(null)
 const stats = ref<any>(null)
 const lastTraceIdx = ref<Set<number>>(new Set())
-const snapshot = ref<any>(null)
 const history = ref<Array<{ used: number; fb: number }>>([])
-const kickHist = ref<Array<{ depth: number; count: number }>>([])
-const experiment = ref<{ kind: 'fallback_vs_load' | 'probe_vs_n'; payload: any } | null>(null)
+const experiment = ref<any>(null)
 
 const miniBinSizeDisplay = computed(() => {
     const v = params.value?.mini_bin_size
@@ -89,6 +73,17 @@ const miniBinSizeDisplay = computed(() => {
 
 const blocked = computed(() => {
     return busy.value
+})
+
+watch(selectedSnapshotId, async (id) => {
+    if (id == null || id <= 0) return
+    try {
+        const { data: a } = await axios.post('/api/analytics/summary', { snapshot_id: id })
+        if (a?.ok && a.summary && stats.value)
+            stats.value = { ...stats.value, analytics_db: a.summary }
+    } catch {
+        /* ignore */
+    }
 })
 
 const rt = ref({
@@ -114,17 +109,56 @@ async function initTable() {
     opResult.value = 'initializing...'
     try {
         const t0 = performance.now()
-        const { data } = await axios.post('/api/init', initForm.value)
+        const { data } = await axios.post('/api/init', {
+            n: initForm.value.n,
+            k: initForm.value.k,
+            snapshot_tag: initForm.value.snapshot_tag || 'init',
+        })
         rt.value.init_ms = performance.now() - t0
         params.value = data.params
+        if (typeof data.snapshot_id === 'number' && data.snapshot_id > 0) {
+            selectedSnapshotId.value = data.snapshot_id
+        }
         opResult.value = data.ok ? 'init ok' : `init failed: ${data.error ?? ''}`
         history.value = []
         lastTraceIdx.value = new Set()
         await refreshStats()
-        await refreshSnapshot()
-        await refreshKickHist()
+        await loadSnapshots()
     } catch (e: any) {
         opResult.value = `init error: ${e?.message ?? e}`
+    } finally {
+        endBusy()
+    }
+}
+
+async function loadSnapshots() {
+    try {
+        const { data } = await axios.post('/api/analytics/snapshots', {})
+        if (data?.ok && Array.isArray(data.items)) {
+            snapshots.value = data.items
+            if (selectedSnapshotId.value == null && data.items.length) {
+                selectedSnapshotId.value = Number(data.items[0].id) || null
+            }
+        }
+    } catch {
+        /* ignore */
+    }
+}
+
+async function dumpStructure() {
+    const sid = selectedSnapshotId.value
+    if (sid == null) {
+        opResult.value = 'structure_dump: no snapshot selected'
+        return
+    }
+    busyTitle.value = '结构落库…'
+    busyHint.value = '写入 facility / cubby / slot_snapshot / tier_stat'
+    beginBusy()
+    try {
+        const { data } = await axios.post('/api/analytics/structure_dump', { snapshot_id: sid })
+        opResult.value = data.ok ? `structure_dump ok (snapshot_id=${data.snapshot_id})` : `structure_dump: ${data.error ?? ''}`
+    } catch (e: any) {
+        opResult.value = `structure_dump error: ${e?.message ?? e}`
     } finally {
         endBusy()
     }
@@ -135,9 +169,20 @@ async function refreshStats() {
     busyHint.value = '正在读取全表统计。'
     beginBusy()
     try {
-        const { data } = await axios.get('/api/stats')
-        stats.value = data
-        history.value.push({ used: data.used_slots ?? 0, fb: data.fallback_used ?? 0 })
+        const { data } = await axios.post('/api/stats', {})
+        let merged = { ...data }
+        if (selectedSnapshotId.value != null && selectedSnapshotId.value > 0) {
+            try {
+                const { data: a } = await axios.post('/api/analytics/summary', {
+                    snapshot_id: selectedSnapshotId.value,
+                })
+                if (a?.ok && a.summary) merged = { ...merged, analytics_db: a.summary }
+            } catch {
+                /* keep server analytics_db */
+            }
+        }
+        stats.value = merged
+        history.value.push({ used: merged?.state?.n ?? 0, fb: merged?.metrics?.router_steps?.max ?? 0 })
 
         // sync params/meta back to UI (resize may update n/total_bins)
         if (data?.params) {
@@ -151,23 +196,86 @@ async function refreshStats() {
     }
 }
 
+async function runO1VsN() {
+    busyTitle.value = '实验：query O(1) vs n'
+    busyHint.value = '后端一次性跑完并返回曲线数据。'
+    beginBusy()
+    try {
+        const kFixed = initForm.value.k
+        const { data } = await axios.post('/api/experiment/o1_vs_n', { k: kFixed })
+        const jobId = data?.job_id
+        if (!data?.ok || !jobId) {
+            opResult.value = `experiment start failed: ${data?.error ?? ''}`
+            return
+        }
+        while (true) {
+            const { data: j } = await axios.post('/api/jobs/get', { id: jobId })
+            if (j?.ok) {
+                busyHint.value = `进度 ${j.progress ?? 0}%：${j.message ?? ''}`
+                if (j.status === 'done') {
+                    const r = j.result
+                    experiment.value = { kind: 'o1_vs_n', payload: r?.points ?? [], k: kFixed }
+                    break
+                }
+                if (j.status === 'error') {
+                    opResult.value = `experiment failed: ${j.job_error ?? ''}`
+                    break
+                }
+            }
+            await new Promise((r) => setTimeout(r, 500))
+        }
+    } catch (e: any) {
+        opResult.value = `experiment error: ${e?.message ?? e}`
+    } finally {
+        endBusy()
+    }
+}
+
+async function runOkVsK() {
+    busyTitle.value = '实验：insert/delete O(k) vs k'
+    busyHint.value = '后端一次性跑完并返回曲线数据。'
+    beginBusy()
+    try {
+        const n = initForm.value.n
+        const { data } = await axios.post('/api/experiment/ok_vs_k', { n })
+        const jobId = data?.job_id
+        if (!data?.ok || !jobId) {
+            opResult.value = `experiment start failed: ${data?.error ?? ''}`
+            return
+        }
+        while (true) {
+            const { data: j } = await axios.post('/api/jobs/get', { id: jobId })
+            if (j?.ok) {
+                busyHint.value = `进度 ${j.progress ?? 0}%：${j.message ?? ''}`
+                if (j.status === 'done') {
+                    const r = j.result
+                    experiment.value = { kind: 'ok_vs_k', payload: r?.series ?? [], n }
+                    break
+                }
+                if (j.status === 'error') {
+                    opResult.value = `experiment failed: ${j.job_error ?? ''}`
+                    break
+                }
+            }
+            await new Promise((r) => setTimeout(r, 500))
+        }
+    } catch (e: any) {
+        opResult.value = `experiment error: ${e?.message ?? e}`
+    } finally {
+        endBusy()
+    }
+}
+
 async function insertOne() {
     busyTitle.value = '单步插入中...'
     busyHint.value = '将返回 kick chain，用于 Canvas 高亮路径。'
     beginBusy()
     try {
         const t0 = performance.now()
-        const { data } = await axios.post('/api/insert', { key: key.value, trace: true })
+        const { data } = await axios.post('/api/insert', { key: key.value })
         rt.value.insert_ms = performance.now() - t0
-        opResult.value = data.ok ? `insert ok (probes=${data.probes})` : `insert fail (probes=${data.probes})`
-        const s = new Set<number>()
-        if (Array.isArray(data.trace)) {
-            for (const t of data.trace) s.add(Number(t.idx))
-        }
-        lastTraceIdx.value = s
+        opResult.value = data.ok ? `insert ok (inserted=${data.inserted})` : `insert fail: ${data.error ?? ''}`
         await refreshStats()
-        await refreshSnapshot()
-        await refreshKickHist()
     } catch (e: any) {
         opResult.value = `insert error: ${e?.message ?? e}`
     } finally {
@@ -177,13 +285,13 @@ async function insertOne() {
 
 async function findOne() {
     busyTitle.value = '查询中...'
-    busyHint.value = '正在扫描偏好 mini-bin + fallback。'
+    busyHint.value = '查询 key 是否存在。'
     beginBusy()
     try {
         const t0 = performance.now()
-        const { data } = await axios.post('/api/find', { key: key.value })
+        const { data } = await axios.post('/api/query', { key: key.value })
         rt.value.find_ms = performance.now() - t0
-        opResult.value = data.found ? `found (probes=${data.probes})` : `not found (probes=${data.probes})`
+        opResult.value = data.found ? `found` : `not found`
     } catch (e: any) {
         opResult.value = `find error: ${e?.message ?? e}`
     } finally {
@@ -193,16 +301,14 @@ async function findOne() {
 
 async function eraseOne() {
     busyTitle.value = '删除中...'
-    busyHint.value = '正在从 mini-bin / fallback 删除。'
+    busyHint.value = '删除 key（幂等）。'
     beginBusy()
     try {
         const t0 = performance.now()
-        const { data } = await axios.post('/api/erase', { key: key.value })
+        const { data } = await axios.post('/api/delete', { key: key.value })
         rt.value.erase_ms = performance.now() - t0
-        opResult.value = data.ok ? `erase ok (probes=${data.probes})` : `erase miss (probes=${data.probes})`
+        opResult.value = data.ok ? `delete ok (deleted=${data.deleted})` : `delete failed: ${data.error ?? ''}`
         await refreshStats()
-        await refreshSnapshot()
-        await refreshKickHist()
     } catch (e: any) {
         opResult.value = `erase error: ${e?.message ?? e}`
     } finally {
@@ -210,119 +316,7 @@ async function eraseOne() {
     }
 }
 
-async function batchInsert() {
-    busyTitle.value = '批量插入中...'
-    busyHint.value = '数据量大时会比较久；可看后端终端日志的 progress 输出。'
-    beginBusy()
-    try {
-        const t0 = performance.now()
-        const { data } = await axios.post('/api/batch_insert', {
-            count: batchForm.value.count,
-            distribution: distForm.value.distribution,
-            skew: batchForm.value.skew,
-        })
-        rt.value.batch_insert_ms = performance.now() - t0
-        opResult.value = `batch ok_count=${data.ok_count}/${data.total} avg_probes=${Number(data.avg_probes).toFixed(3)}`
-        if (data?.params) {
-            params.value = params.value ? { ...params.value, ...data.params } : data.params
-            if (typeof data.params.n === 'number') initForm.value.n = data.params.n
-        }
-        await refreshStats()
-        await refreshSnapshot()
-        await refreshKickHist()
-    } catch (e: any) {
-        opResult.value = `batch error: ${e?.message ?? e}`
-    } finally {
-        endBusy()
-    }
-}
-
-async function queryTest() {
-    busyTitle.value = '查询测试中...'
-    busyHint.value = '正在执行多次查询并统计 avg/p99/max probe。'
-    beginBusy()
-    try {
-        const t0 = performance.now()
-        const { data } = await axios.post('/api/query_test', {
-            count: queryForm.value.count,
-            hit_rate: queryForm.value.hit_rate,
-        })
-        rt.value.query_test_ms = performance.now() - t0
-        opResult.value = `query avg=${Number(data.avg_probes).toFixed(3)} p99=${data.p99_probes} max=${data.max_probes}`
-    } catch (e: any) {
-        opResult.value = `query_test error: ${e?.message ?? e}`
-    } finally {
-        endBusy()
-    }
-}
-
-async function refreshSnapshot() {
-    try {
-        const t0 = performance.now()
-        const { data } = await axios.get('/api/snapshot', { params: snapForm.value })
-        rt.value.snapshot_ms = performance.now() - t0
-        snapshot.value = data
-    } catch (e: any) {
-        opResult.value = `snapshot error: ${e?.message ?? e}`
-    }
-}
-
-async function refreshKickHist() {
-    try {
-        const { data } = await axios.get('/api/experiment/kick_depth_hist')
-        kickHist.value = data.hist ?? []
-    } catch (e: any) {
-        opResult.value = `kick_hist error: ${e?.message ?? e}`
-    }
-}
-
-async function runFallbackVsLoad() {
-    busyTitle.value = '实验运行中：fallback vs load'
-    busyHint.value = '该实验会重建表并分阶段插入，可能需要几分钟。'
-    beginBusy()
-    try {
-        const { data } = await axios.post('/api/experiment/fallback_vs_load', {
-            n: initForm.value.n,
-            k: initForm.value.k,
-            distribution: distForm.value.distribution,
-            skew: batchForm.value.skew,
-            load_targets: [0.7, 0.8, 0.9, 0.95, 0.98],
-            step: 2000,
-        })
-        experiment.value = { kind: 'fallback_vs_load', payload: data.points ?? [] }
-        opResult.value = 'fallback_vs_load done (table re-initialized)'
-        await refreshStats()
-        await refreshSnapshot()
-        await refreshKickHist()
-    } catch (e: any) {
-        opResult.value = `fallback_vs_load error: ${e?.message ?? e}`
-    } finally {
-        endBusy()
-    }
-}
-
-async function runProbeVsN() {
-    busyTitle.value = '实验运行中：probe vs n'
-    busyHint.value = '该实验会对多个 n/k 反复 init+insert+query，可能需要几分钟。'
-    beginBusy()
-    try {
-        const { data } = await axios.post('/api/experiment/probe_vs_n', {
-            ns: [10000, 30000, 100000],
-            ks: [1, 2, 3],
-            inserts: 20000,
-            queries: 5000,
-        })
-        experiment.value = { kind: 'probe_vs_n', payload: data.series ?? [] }
-        opResult.value = 'probe_vs_n done (table re-initialized)'
-        await refreshStats()
-        await refreshSnapshot()
-        await refreshKickHist()
-    } catch (e: any) {
-        opResult.value = `probe_vs_n error: ${e?.message ?? e}`
-    } finally {
-        endBusy()
-    }
-}
+// 其余实验/快照接口在该版本前端不再使用（前端仅展示后端效果，不改变样式框架）。
 
 function beginBusy() {
     busy.value = true

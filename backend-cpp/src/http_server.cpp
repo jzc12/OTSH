@@ -1,9 +1,11 @@
 #include "http_server.h"
-
-#include "db.h"
 #include "ht.h"
-#include <algorithm>
+#include "metrics.h"
+#include "storage.h"
+
 #include <chrono>
+#include <climits>
+#include <cmath>
 #include <ctime>
 #include <fstream>
 #include <httplib.h>
@@ -11,9 +13,13 @@
 #include <iostream>
 #include <mutex>
 #include <nlohmann/json.hpp>
+#include <random>
 #include <stdexcept>
 #include <string>
-
+#include <thread>
+#include <map>
+#include <unordered_map>
+#include <vector>
 
 namespace otsh {
 
@@ -34,6 +40,16 @@ static double j_d(const json &j, const char *k, double defv) {
     return defv;
   return j.at(k).get<double>();
 }
+static std::string j_s(const json &j, const char *k, const std::string &defv) {
+  if (!j.contains(k))
+    return defv;
+  return j.at(k).get<std::string>();
+}
+static uint16_t j_u16(const json &j, const char *k, uint16_t defv) {
+  if (!j.contains(k))
+    return defv;
+  return static_cast<uint16_t>(j.at(k).get<uint32_t>());
+}
 
 static json parse_json_body_or_throw(const httplib::Request &req) {
   try {
@@ -47,6 +63,73 @@ static void respond_json(httplib::Response &res, const json &out,
                          int status = 200) {
   res.status = status;
   res.set_content(out.dump(), "application/json");
+}
+
+static StorageResult dump_structure_to_storage(IStorage *storage, HashTable &ht,
+                                               int64_t snapshot_id) {
+  if (!storage || snapshot_id <= 0)
+    return {false, "bad_snapshot"};
+  const auto st0 = ht.state();
+  std::vector<CubbyStructureView> nodes;
+  ht.visit_structure(
+      [&](const CubbyStructureView &v) { nodes.push_back(v); });
+
+  std::vector<SqlCubbyRow> cubbies;
+  std::vector<SqlSlotRow> slots;
+  cubbies.reserve(nodes.size());
+  std::unordered_map<int, int> tail_for_fac;
+
+  int cid = 1;
+  for (const auto &v : nodes) {
+    SqlCubbyRow c;
+    c.id = cid;
+    c.facility_id = v.facility_id;
+    c.tier = v.tier;
+    c.capacity = v.capacity;
+    c.size = v.size;
+    c.is_tail = v.is_tail;
+    cubbies.push_back(c);
+    if (v.is_tail)
+      tail_for_fac[v.facility_id] = cid;
+
+    for (size_t si = 0; si < v.slot_keys.size(); si++) {
+      SqlSlotRow sr;
+      sr.cubby_id = cid;
+      sr.slot_index = static_cast<int>(si);
+      const auto &opt = v.slot_keys[si];
+      sr.occupied = opt.has_value();
+      sr.key_hash = opt.has_value() ? ht.pi_of(*opt) : 0;
+      sr.probe_length = 0;
+      slots.push_back(sr);
+    }
+    cid++;
+  }
+
+  std::vector<SqlFacilityRow> facilities;
+  facilities.reserve(static_cast<size_t>(st0.facilities));
+  for (uint64_t fi = 0; fi < st0.facilities; fi++) {
+    SqlFacilityRow f;
+    f.id = static_cast<int>(fi);
+    auto it = tail_for_fac.find(f.id);
+    f.tail_cubby_id = it != tail_for_fac.end() ? it->second : 0;
+    facilities.push_back(f);
+  }
+
+  std::map<std::pair<int, int>, int> tier_cnt;
+  for (const auto &c : cubbies)
+    tier_cnt[{c.facility_id, c.tier}]++;
+  std::vector<SqlTierStatRow> tier_stats;
+  tier_stats.reserve(tier_cnt.size());
+  for (const auto &e : tier_cnt) {
+    SqlTierStatRow t;
+    t.facility_id = e.first.first;
+    t.tier = e.first.second;
+    t.cubby_count = e.second;
+    tier_stats.push_back(t);
+  }
+
+  return storage->analytics_replace_structure(snapshot_id, facilities, cubbies,
+                                              slots, tier_stats);
 }
 
 static bool validate_init_params(uint64_t n, int k, double lf,
@@ -66,16 +149,27 @@ static bool validate_init_params(uint64_t n, int k, double lf,
   return true;
 }
 
-static uint64_t q_u64(const httplib::Request &req, const char *k,
-                      uint64_t defv) {
-  if (!req.has_param(k))
-    return defv;
-  try {
-    return static_cast<uint64_t>(std::stoull(req.get_param_value(k)));
-  } catch (...) {
-    return defv;
+struct LocalHist {
+  std::vector<uint64_t> samples;
+  void add(uint64_t ns) { samples.push_back(ns); }
+  uint64_t quantile(double q) const {
+    if (samples.empty())
+      return 0;
+    std::vector<uint64_t> tmp = samples;
+    const size_t idx = static_cast<size_t>(std::min<double>(
+        tmp.size() - 1, std::floor(q * static_cast<double>(tmp.size() - 1))));
+    std::nth_element(tmp.begin(), tmp.begin() + idx, tmp.end());
+    return tmp[idx];
   }
-}
+  uint64_t p50() const { return quantile(0.50); }
+  uint64_t p99() const { return quantile(0.99); }
+  uint64_t max() const {
+    uint64_t m = 0;
+    for (auto v : samples)
+      m = std::max(m, v);
+    return m;
+  }
+};
 
 class Logger {
 public:
@@ -122,26 +216,42 @@ private:
   }
 };
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// API endpoints
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-int run_server(const DbConfig &db_cfg, const ServerConfig &srv_cfg) {
-  Db db(db_cfg);
-  db.connect();
-  HashTableDb ht(db);
-
+int run_server(const ServerConfig &srv_cfg) {
   httplib::Server app;
+  app.set_default_headers({{"Cache-Control", "no-store"}});
+
   const char *log_path_env = std::getenv("LOG_FILE");
   Logger log(log_path_env ? std::string(log_path_env)
                           : std::string("backend.log"));
 
-  log.info("server starting, bind=", srv_cfg.bind_host, " port=", srv_cfg.port,
-           " db=", db_cfg.user, "@", db_cfg.host, ":", db_cfg.port, "/",
-           db_cfg.database);
+  log.info("server starting, bind=", srv_cfg.bind_host, " port=", srv_cfg.port);
 
-  // avoid browser/proxy caching for GET endpoints like snapshot/stats
-  app.set_default_headers({{"Cache-Control", "no-store"}});
+  HashTable ht;
+  std::unique_ptr<IStorage> storage;
+  int64_t active_snapshot_id = -1;
+  std::mutex service_mu; // 序列化 init 与写入路径（简单可靠）
+
+  struct JobState {
+    std::string id;
+    std::string kind;
+    std::string status; // running|done|error
+    int progress = 0;   // 0..100
+    std::string message;
+    json result = json::object();
+    std::string error;
+  };
+  std::mutex jobs_mu;
+  std::unordered_map<std::string, JobState> jobs;
+  uint64_t job_seq = 0;
+
+  auto new_job_id = [&]() -> std::string {
+    job_seq++;
+    return "job_" + std::to_string(job_seq) + "_" +
+           std::to_string(
+               static_cast<uint64_t>(std::chrono::high_resolution_clock::now()
+                                         .time_since_epoch()
+                                         .count()));
+  };
 
   app.set_logger(
       [&](const httplib::Request &req, const httplib::Response &res) {
@@ -153,7 +263,13 @@ int run_server(const DbConfig &db_cfg, const ServerConfig &srv_cfg) {
     res.set_content("ok", "text/plain");
   });
 
-  // POST /api/init { n, k, load_factor, seed1?, seed2?, seed3? }
+  // POST /api/init
+  // {
+  //   n,k,
+  //   reset?: true|false
+  //
+  // 其余参数（load_factor / seeds / mysql 连接信息）全部使用 config.h 默认值。
+  // }
   app.Post("/api/init", [&](const httplib::Request &req,
                             httplib::Response &res) {
     const auto t0 = std::chrono::high_resolution_clock::now();
@@ -161,71 +277,129 @@ int run_server(const DbConfig &db_cfg, const ServerConfig &srv_cfg) {
       json in = parse_json_body_or_throw(req);
       uint64_t n = j_u64(in, "n", 100000);
       int k = j_i(in, "k", 2);
-      double lf = j_d(in, "load_factor", 0.98);
-
+      bool reset = true;
+      if (in.contains("reset")) {
+        const json &jr = in["reset"];
+        if (jr.is_boolean())
+          reset = jr.get<bool>();
+        else if (jr.is_number())
+          reset = jr.get<double>() != 0.0;
+        else if (jr.is_string()) {
+          const std::string s = jr.get<std::string>();
+          reset = !(s == "0" || s == "false");
+        }
+      }
       std::string verr;
+      // 使用默认 load_factor 做校验口径（前端不会传 lf）
+      const double lf = TableParams{}.load_factor;
       if (!validate_init_params(n, k, lf, verr)) {
         respond_json(res, json{{"ok", false}, {"error", verr}}, 400);
         return;
       }
 
-      std::optional<uint64_t> s1, s2, s3;
-      if (in.contains("seed1"))
-        s1 = in["seed1"].get<uint64_t>();
-      if (in.contains("seed2"))
-        s2 = in["seed2"].get<uint64_t>();
-      if (in.contains("seed3"))
-        s3 = in["seed3"].get<uint64_t>();
+      TableParams p;
+      p.n = n;
+      p.k = k;
+      // 其余保持默认（含 load_factor、seeds、mysql_*）
 
-      // reset meta row to force new config
-      db.exec("DROP TABLE IF EXISTS ht_meta");
-      auto p = ht.load_or_init_meta(n, k, lf, s1, s2, s3);
-      ht.reset_kick_hist(p.k);
-      // Simplified behavior: init clears all keys/fps (no rebuild / no
-      // persistence across init).
-      auto r = ht.init_table(p);
-      const auto t1 = std::chrono::high_resolution_clock::now();
-      log.info("init done ok=", r.ok, " n=", p.n, " k=", p.k,
-               " bins=", p.total_bins, " bin_size=", p.bin_size,
-               " slots=", p.capacity_slots, " elapsed_ms=",
-               std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0)
-                   .count());
-      if (!r.ok) {
-        log.error("init failed: ", r.error);
+      std::lock_guard<std::mutex> lk(service_mu);
+
+      storage = make_storage_mysql();
+
+      StorageOpenOptions opt;
+      opt.mysql_host = p.mysql_host;
+      opt.mysql_port = p.mysql_port;
+      opt.mysql_user = p.mysql_user;
+      opt.mysql_password = p.mysql_password;
+      opt.mysql_database = p.mysql_database;
+      opt.mysql_table = p.mysql_table;
+
+      auto openr = storage->open(opt);
+      if (!openr.ok) {
+        storage.reset();
+        active_snapshot_id = -1;
+        log.error("init mysql open failed: ", openr.error);
+        respond_json(res, json{{"ok", false}, {"error", openr.error}}, 500);
+        return;
       }
 
-      json out;
-      out["ok"] = r.ok;
-      out["error"] = r.error;
-      out["params"] = {
-          {"n", p.n},
-          {"k", p.k},
-          {"load_factor", p.load_factor},
-          {"seed1", p.seed1},
-          {"seed2", p.seed2},
-          {"seed3", p.seed3},
-          {"mini_bin_size", p.mini_bin_size},
-          {"num_mini_bins", p.num_mini_bins},
-          {"fallback_size", p.fallback_size},
-          {"bin_size", p.bin_size},
-          {"total_bins", p.total_bins},
-          {"capacity_slots", p.capacity_slots},
-      };
+      auto r = ht.init(p);
+      if (!r.ok) {
+        storage.reset();
+        active_snapshot_id = -1;
+        log.error("init ht.init failed: ", r.error);
+        respond_json(res, json{{"ok", false}, {"error", r.error}}, 500);
+        return;
+      }
 
-      respond_json(res, out, r.ok ? 200 : 500);
+      if (reset) {
+        auto clr = storage->clear();
+        if (!clr.ok) {
+          storage.reset();
+          active_snapshot_id = -1;
+          log.error("init storage.clear failed: ", clr.error);
+          respond_json(res, json{{"ok", false}, {"error", clr.error}}, 500);
+          return;
+        }
+      } else {
+        std::vector<uint64_t> keys;
+        auto lr =
+            storage->for_each_key([&](uint64_t kk) { keys.push_back(kk); });
+        if (!lr.ok) {
+          storage.reset();
+          active_snapshot_id = -1;
+          log.error("init for_each_key failed: ", lr.error);
+          respond_json(res, json{{"ok", false}, {"error", lr.error}}, 500);
+          return;
+        }
+        (void)ht.bulk_load(keys);
+      }
+
+      auto st = ht.state();
+      const std::string snap_tag = j_s(in, "snapshot_tag", "init");
+      active_snapshot_id =
+          storage->analytics_create_snapshot(snap_tag, st.n, st.N, st.K);
+      storage->analytics_flush_metrics(true);
+      const auto t1 = std::chrono::high_resolution_clock::now();
+      log.info("init done ok=", r.ok, " n=", p.n, " k=", p.k, " N=", st.N,
+               " K=", st.K, " facilities=", st.facilities,
+               " snapshot_id=", active_snapshot_id,
+               " storage=mysql elapsed_ms=",
+               std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0)
+                   .count());
+
+      respond_json(res,
+                   json{{"ok", true},
+                        {"error", ""},
+                        {"snapshot_id", active_snapshot_id},
+                        {"snapshot_tag", snap_tag},
+                        {"params",
+                         {{"n", p.n},
+                          {"k", p.k},
+                          {"load_factor", p.load_factor},
+                          {"seed1", p.seed1},
+                          {"seed2", p.seed2},
+                          {"seed3", p.seed3},
+                          {"reset", reset},
+                          {"mysql_host", p.mysql_host},
+                          {"mysql_port", p.mysql_port},
+                          {"mysql_user", p.mysql_user},
+                          {"mysql_database", p.mysql_database},
+                          {"mysql_table", p.mysql_table}}},
+                        {"state",
+                         {{"n", st.n},
+                          {"N", st.N},
+                          {"K", st.K},
+                          {"facilities", st.facilities}}}},
+                   200);
     } catch (const std::exception &e) {
       respond_json(res, json{{"ok", false}, {"error", e.what()}}, 400);
     }
   });
 
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  // 单批次操作
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
   // POST /api/insert { key }
   app.Post("/api/insert", [&](const httplib::Request &req,
                               httplib::Response &res) {
-    const auto t0 = std::chrono::high_resolution_clock::now();
     try {
       json in = parse_json_body_or_throw(req);
       if (!in.contains("key")) {
@@ -233,528 +407,638 @@ int run_server(const DbConfig &db_cfg, const ServerConfig &srv_cfg) {
         return;
       }
       uint64_t key = j_u64(in, "key", 0);
-      bool trace = in.contains("trace") ? in["trace"].get<bool>() : false;
-      auto p = ht.load_or_init_meta(100000, 2, 0.98, std::nullopt, std::nullopt,
-                                    std::nullopt);
-      auto r = ht.insert_key(p, key, trace);
-      const auto t1 = std::chrono::high_resolution_clock::now();
-      log.info("insert key=", key, " ok=", r.ok, " probes=", r.probes,
-               " trace=", trace ? r.trace.size() : 0, " elapsed_us=",
-               std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0)
-                   .count());
-      if (!r.ok) {
-        log.error("insert failed: ", r.error);
-      }
 
-      json out;
-      out["ok"] = r.ok;
-      out["probes"] = r.probes;
-      out["error"] = r.error;
-      out["bin"] = r.bin;
-      out["mini"] = r.mini;
-      out["fp"] = r.fp;
-      if (trace) {
-        out["trace"] = json::array();
-        for (const auto &s : r.trace) {
-          out["trace"].push_back({{"idx", s.idx},
-                                  {"from_fp", s.from_fp},
-                                  {"to_fp", s.to_fp},
-                                  {"depth", s.depth},
-                                  {"action", s.action}});
-        }
-      }
-      respond_json(res, out, r.ok ? 200 : 500);
-    } catch (const std::exception &e) {
-      respond_json(res, json{{"ok", false}, {"error", e.what()}}, 400);
-    }
-  });
-
-  // POST /api/find { key }
-  app.Post("/api/find", [&](const httplib::Request &req,
-                            httplib::Response &res) {
-    try {
-      json in = parse_json_body_or_throw(req);
-      if (!in.contains("key")) {
-        respond_json(
-            res,
-            json{{"found", false}, {"probes", 0}, {"error", "missing_key"}},
-            400);
-        return;
-      }
-      uint64_t key = j_u64(in, "key", 0);
-      auto p = ht.load_or_init_meta(100000, 2, 0.98, std::nullopt, std::nullopt,
-                                    std::nullopt);
-      auto r = ht.find_key(p, key);
-      respond_json(
-          res, json{{"found", r.ok}, {"probes", r.probes}, {"error", r.error}},
-          200);
-    } catch (const std::exception &e) {
-      respond_json(
-          res, json{{"found", false}, {"probes", 0}, {"error", e.what()}}, 400);
-    }
-  });
-
-  // POST /api/erase { key }
-  app.Post("/api/erase", [&](const httplib::Request &req,
-                             httplib::Response &res) {
-    try {
-      json in = parse_json_body_or_throw(req);
-      if (!in.contains("key")) {
-        respond_json(
-            res, json{{"ok", false}, {"probes", 0}, {"error", "missing_key"}},
-            400);
-        return;
-      }
-      uint64_t key = j_u64(in, "key", 0);
-      auto p = ht.load_or_init_meta(100000, 2, 0.98, std::nullopt, std::nullopt,
-                                    std::nullopt);
-      auto r = ht.erase_key(p, key);
-      respond_json(res,
-                   json{{"ok", r.ok}, {"probes", r.probes}, {"error", r.error}},
-                   r.ok ? 200 : 404);
-    } catch (const std::exception &e) {
-      respond_json(res, json{{"ok", false}, {"probes", 0}, {"error", e.what()}},
-                   400);
-    }
-  });
-
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  // 多批次操作
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-  // POST /api/batch_insert { count, distribution: "uniform"|"skewed",
-  // key_space?, skew? , with_trace? }
-  app.Post("/api/batch_insert", [&](const httplib::Request &req,
-                                    httplib::Response &res) {
-    const auto t_req0 = std::chrono::high_resolution_clock::now();
-    try {
-      //////////////////////////// 参数解析 ////////////////////////////
-      json in = json::parse(req.body.empty() ? "{}" : req.body);
-      uint64_t count = j_u64(in, "count", 1000);
-      count = std::min<uint64_t>(count, 200000);
-      std::string dist = in.contains("distribution")
-                             ? in["distribution"].get<std::string>()
-                             : "uniform";
-      uint64_t key_space = j_u64(in, "key_space", 0);
-      if (key_space == 0)
-        key_space = count * 10;
-      double skew = j_d(in, "skew", 1.2);
-
-      // require initialized table
-      auto exists = db.select_one_u64(
-          "SELECT COUNT(*) FROM information_schema.tables "
-          "WHERE table_schema=DATABASE() AND table_name='hash_table'");
-      if (!exists.has_value() || *exists == 0) {
+      std::lock_guard<std::mutex> lk(service_mu);
+      if (!storage) {
         respond_json(res, json{{"ok", false}, {"error", "not_initialized"}},
                      400);
         return;
       }
 
-      auto p = ht.load_or_init_meta(100000, 2, 0.98, std::nullopt, std::nullopt,
-                                    std::nullopt);
-      log.info("batch_insert start count=", count, " dist=", dist,
-               " key_space=", key_space, " skew=", skew);
-
-      //////////////////////////// 准备批量插入（可能触发扩容）
-      ///////////////////////////////
-      ht.prepare_batch_insert(p, count);
-      // 扩容可能更新了 ht_meta.n/total_bins，因此需要重新加载参数。
-      p = ht.load_or_init_meta(100000, 2, 0.98, std::nullopt, std::nullopt,
-                               std::nullopt);
-
-      // generate keys
-      uint64_t seed = j_u64(in, "seed", 0);
-      if (seed == 0)
-        seed = p.seed2 ^ 0xBADC0FFEEULL;
-      uint64_t ok = 0;
-      uint64_t probes = 0;
-      uint64_t max_depth = 0;
-
-      auto t0 = std::chrono::high_resolution_clock::now();
-      for (uint64_t i = 0; i < count; i++) {
-        uint64_t key;
-        if (dist == "skewed") {
-          uint64_t r = splitmix64(seed + i) % key_space;
-          double u = (double)(splitmix64(seed ^ (i + 17)) & 0xFFFFFFFFu) /
-                     (double)0x100000000ULL;
-          double x = std::pow(std::max(1e-12, u), -skew);
-          key = (static_cast<uint64_t>(x) + r) % key_space;
-        } else {
-          key = splitmix64(seed + i) % key_space;
-        }
-
-        auto r = ht.insert_key(p, key, false);
-        probes += r.probes;
-        ok += r.ok ? 1 : 0;
-        for (auto &s : r.trace)
-          (void)s;
-
-        if ((i + 1) % 5000 == 0) {
-          log.info("batch_insert progress ", (i + 1), "/", count, " ok=", ok);
+      const auto t0 = std::chrono::high_resolution_clock::now();
+      auto r = ht.insert(key);
+      const auto t1 = std::chrono::high_resolution_clock::now();
+      global_metrics().on_ht_insert_ns(static_cast<uint64_t>(
+          std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)
+              .count()));
+      if (!r.ok) {
+        respond_json(res, json{{"ok", false}, {"error", r.error}}, 500);
+        return;
+      }
+      if (r.inserted) {
+        auto pr = storage->put(key);
+        if (!pr.ok) {
+          respond_json(res, json{{"ok", false}, {"error", pr.error}}, 500);
+          return;
         }
       }
-      auto t1 = std::chrono::high_resolution_clock::now();
-      auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0)
-                    .count();
-
-      // reload meta so n/total_bins reflect any resize + persist to ht_meta
-      p = ht.load_or_init_meta(100000, 2, 0.98, std::nullopt, std::nullopt,
-                               std::nullopt);
-      auto st = ht.stats(p);
-      (void)ht.bin_stats(p, 0, std::min<uint64_t>(p.total_bins, 2000));
-
-      json out;
-      out["ok_count"] = ok;
-      out["total"] = count;
-      out["avg_probes"] = count ? (double)probes / (double)count : 0.0;
-      out["elapsed_ms"] = ms;
-      out["used_slots"] = st.used_slots;
-      out["fallback_used"] = st.fallback_used;
-      out["params"] = {
-          {"n", p.n},
-          {"k", p.k},
-          {"load_factor", p.load_factor},
-          {"mini_bin_size", p.mini_bin_size},
-          {"num_mini_bins", p.num_mini_bins},
-          {"fallback_size", p.fallback_size},
-          {"bin_size", p.bin_size},
-          {"total_bins", p.total_bins},
-          {"capacity_slots", p.capacity_slots},
-      };
-      (void)max_depth;
-      log.info("batch_insert done ok=", ok, "/", count,
-               " avg_probes=", (count ? (double)probes / (double)count : 0.0),
-               " elapsed_ms=", ms, " used=", st.used_slots,
-               " fallback_used=", st.fallback_used, " req_ms=",
-               std::chrono::duration_cast<std::chrono::milliseconds>(
-                   std::chrono::high_resolution_clock::now() - t_req0)
-                   .count());
-      res.set_content(out.dump(), "application/json");
+      if (active_snapshot_id > 0) {
+        const int64_t lat =
+            std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
+        SqlMetricRow row;
+        row.snapshot_id = active_snapshot_id;
+        row.operation_type = "insert";
+        row.probe_count = static_cast<int>(
+            std::min<uint64_t>(r.router_probe_steps,
+                               static_cast<uint64_t>(INT_MAX)));
+        row.kick_count = static_cast<int>(
+            std::min<uint64_t>(r.kick_count, static_cast<uint64_t>(INT_MAX)));
+        row.latency_ns = lat;
+        row.cubby_tier = r.cubby_tier;
+        storage->analytics_enqueue_metric(row);
+      }
+      respond_json(
+          res,
+          json{{"ok", true},
+               {"inserted", r.inserted},
+               {"error", ""},
+               {"ht_ns",
+                std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)
+                    .count()}},
+          200);
     } catch (const std::exception &e) {
-      log.error("batch_insert exception: ", e.what());
+      respond_json(res, json{{"ok", false}, {"error", e.what()}}, 400);
+    }
+  });
+
+  // POST /api/query { key }
+  app.Post("/api/query", [&](const httplib::Request &req,
+                             httplib::Response &res) {
+    try {
+      json in = parse_json_body_or_throw(req);
+      if (!in.contains("key")) {
+        respond_json(
+            res,
+            json{{"ok", false}, {"found", false}, {"error", "missing_key"}},
+            400);
+        return;
+      }
+      uint64_t key = j_u64(in, "key", 0);
+      std::lock_guard<std::mutex> lk(service_mu);
+      if (!storage) {
+        respond_json(
+            res,
+            json{{"ok", false}, {"found", false}, {"error", "not_initialized"}},
+            400);
+        return;
+      }
+      const auto t0 = std::chrono::high_resolution_clock::now();
+      auto r = ht.query(key);
+      const auto t1 = std::chrono::high_resolution_clock::now();
+      global_metrics().on_ht_query_ns(static_cast<uint64_t>(
+          std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)
+              .count()));
+      if (active_snapshot_id > 0) {
+        const int64_t lat =
+            std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
+        SqlMetricRow row;
+        row.snapshot_id = active_snapshot_id;
+        row.operation_type = "query";
+        row.probe_count = static_cast<int>(
+            std::min<uint64_t>(r.router_probe_steps,
+                               static_cast<uint64_t>(INT_MAX)));
+        row.kick_count = 0;
+        row.latency_ns = lat;
+        row.cubby_tier = r.cubby_tier;
+        storage->analytics_enqueue_metric(row);
+      }
+      respond_json(
+          res,
+          json{{"ok", r.ok},
+               {"found", r.found},
+               {"error", r.error},
+               {"ht_ns",
+                std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)
+                    .count()}},
+          200);
+    } catch (const std::exception &e) {
+      respond_json(
+          res, json{{"ok", false}, {"found", false}, {"error", e.what()}}, 400);
+    }
+  });
+
+  // POST /api/delete { key }
+  app.Post("/api/delete", [&](const httplib::Request &req,
+                              httplib::Response &res) {
+    try {
+      json in = parse_json_body_or_throw(req);
+      if (!in.contains("key")) {
+        respond_json(
+            res,
+            json{{"ok", false}, {"deleted", false}, {"error", "missing_key"}},
+            400);
+        return;
+      }
+      uint64_t key = j_u64(in, "key", 0);
+      std::lock_guard<std::mutex> lk(service_mu);
+      if (!storage) {
+        respond_json(res,
+                     json{{"ok", false},
+                          {"deleted", false},
+                          {"error", "not_initialized"}},
+                     400);
+        return;
+      }
+
+      const auto t0 = std::chrono::high_resolution_clock::now();
+      auto r = ht.erase(key);
+      const auto t1 = std::chrono::high_resolution_clock::now();
+      global_metrics().on_ht_delete_ns(static_cast<uint64_t>(
+          std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)
+              .count()));
+      if (!r.ok) {
+        respond_json(
+            res, json{{"ok", false}, {"deleted", false}, {"error", r.error}},
+            500);
+        return;
+      }
+      if (r.deleted) {
+        auto dr = storage->erase(key);
+        if (!dr.ok) {
+          respond_json(
+              res, json{{"ok", false}, {"deleted", false}, {"error", dr.error}},
+              500);
+          return;
+        }
+      }
+      if (active_snapshot_id > 0) {
+        const int64_t lat =
+            std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
+        SqlMetricRow row;
+        row.snapshot_id = active_snapshot_id;
+        row.operation_type = "delete";
+        row.probe_count = static_cast<int>(
+            std::min<uint64_t>(r.router_probe_steps,
+                               static_cast<uint64_t>(INT_MAX)));
+        row.kick_count = static_cast<int>(
+            std::min<uint64_t>(r.kick_count, static_cast<uint64_t>(INT_MAX)));
+        row.latency_ns = lat;
+        row.cubby_tier = r.cubby_tier;
+        storage->analytics_enqueue_metric(row);
+      }
+      respond_json(
+          res,
+          json{{"ok", true},
+               {"deleted", r.deleted},
+               {"error", ""},
+               {"ht_ns",
+                std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)
+                    .count()}},
+          200);
+    } catch (const std::exception &e) {
+      respond_json(res,
+                   json{{"ok", false}, {"deleted", false}, {"error", e.what()}},
+                   400);
+    }
+  });
+
+  // POST /api/stats
+  // 只读：输出指标与当前表状态（用于 theory-like 验收）。
+  app.Post("/api/stats", [&](const httplib::Request &, httplib::Response &res) {
+    try {
+      std::lock_guard<std::mutex> lk(service_mu);
+      const auto ms = global_metrics().snapshot();
+      const auto st = ht.state();
+      const double n_d = static_cast<double>(std::max<uint64_t>(1, st.n));
+      const double lower_per_key = 64.0 - std::log2(n_d);
+      const double lower_bits = lower_per_key * n_d;
+      const double payload_bits =
+          64.0 * n_d; // 目前未做 quotienting，按完整 key 估算
+      const double meta_bits =
+          static_cast<double>(ms.meta_bits_max); // 保守：先用 max 近似展示
+      const double total_bits = payload_bits + meta_bits;
+      const double wasted_bpk = (total_bits - lower_bits) / n_d;
+      if (storage)
+        storage->analytics_flush_metrics(true);
+      json out = {
+          {"ok", true},
+          {"error", ""},
+          {"snapshot_id", active_snapshot_id},
+          {"metrics",
+           {{"ops",
+             {{"init", ms.ops_init},
+              {"insert", ms.ops_insert},
+              {"query", ms.ops_query},
+              {"delete", ms.ops_delete}}},
+            {"moved",
+             {{"insert_total", ms.insert_moved_total},
+              {"insert_max", ms.insert_moved_max},
+              {"delete_total", ms.delete_moved_total},
+              {"delete_max", ms.delete_moved_max}}},
+            {"router_steps",
+             {{"total", ms.router_steps_total}, {"max", ms.router_steps_max}}},
+            {"meta_bits",
+             {{"total", ms.meta_bits_total}, {"max", ms.meta_bits_max}}},
+            {"ht_ns",
+             {{"init",
+               {{"count", ms.ht_init.count},
+                {"total_ns", ms.ht_init.total_ns},
+                {"max_ns", ms.ht_init.max_ns},
+                {"p50_ns", ms.ht_init.p50_ns},
+                {"p99_ns", ms.ht_init.p99_ns}}},
+              {"insert",
+               {{"count", ms.ht_insert.count},
+                {"total_ns", ms.ht_insert.total_ns},
+                {"max_ns", ms.ht_insert.max_ns},
+                {"p50_ns", ms.ht_insert.p50_ns},
+                {"p99_ns", ms.ht_insert.p99_ns}}},
+              {"query",
+               {{"count", ms.ht_query.count},
+                {"total_ns", ms.ht_query.total_ns},
+                {"max_ns", ms.ht_query.max_ns},
+                {"p50_ns", ms.ht_query.p50_ns},
+                {"p99_ns", ms.ht_query.p99_ns}}},
+              {"delete",
+               {{"count", ms.ht_delete.count},
+                {"total_ns", ms.ht_delete.total_ns},
+                {"max_ns", ms.ht_delete.max_ns},
+                {"p50_ns", ms.ht_delete.p50_ns},
+                {"p99_ns", ms.ht_delete.p99_ns}}}}},
+            {"events",
+             {{"rebuild_down", ms.events.rebuild_down},
+              {"rebuild_up", ms.events.rebuild_up},
+              {"resize_start", ms.events.resize_start},
+              {"resize_finish", ms.events.resize_finish}}}}},
+          {"state",
+           {{"n", st.n},
+            {"N", st.N},
+            {"K", st.K},
+            {"facilities", st.facilities}}},
+          {"space_bits",
+           {{"payload_bits", payload_bits},
+            {"meta_bits_est", meta_bits},
+            {"total_bits_est", total_bits},
+            {"lower_bound_bits_est", lower_bits},
+            {"wasted_bits_per_key_est", wasted_bpk}}}};
+      if (storage && active_snapshot_id > 0) {
+        try {
+          out["analytics_db"] = json::parse(
+              storage->analytics_summary_json(active_snapshot_id));
+        } catch (...) {
+          out["analytics_db"] = json::object();
+        }
+      }
+      respond_json(res, out, 200);
+    } catch (const std::exception &e) {
       respond_json(res, json{{"ok", false}, {"error", e.what()}}, 500);
     }
   });
 
-  // POST /api/query_test { count, hit_rate }
-  app.Post("/api/query_test", [&](const httplib::Request &req,
-                                  httplib::Response &res) {
-    json in = json::parse(req.body.empty() ? "{}" : req.body);
-    uint64_t count = j_u64(in, "count", 5000);
-    count = std::min<uint64_t>(count, 200000);
-    double hit_rate = j_d(in, "hit_rate", 0.5);
-    hit_rate = std::min(1.0, std::max(0.0, hit_rate));
-
-    auto p = ht.load_or_init_meta(100000, 2, 0.98, std::nullopt, std::nullopt,
-                                  std::nullopt);
-    uint64_t seed = j_u64(in, "seed", p.seed1 ^ 0xC001D00DULL);
-
-    std::vector<uint64_t> probes_list;
-    probes_list.reserve(count);
-    uint64_t found = 0;
-    for (uint64_t i = 0; i < count; i++) {
-      bool want_hit = ((double)(splitmix64(seed + i) & 0xFFFFFFFFu) /
-                       (double)0x100000000ULL) < hit_rate;
-      uint64_t key = want_hit ? (splitmix64(seed ^ (i + 11)) % (p.n + 1))
-                              : (splitmix64(seed ^ (i + 11)) + (1ULL << 60));
-      auto r = ht.find_key(p, key);
-      probes_list.push_back(r.probes);
-      if (r.ok)
-        found++;
-    }
-    std::sort(probes_list.begin(), probes_list.end());
-    auto p99 =
-        probes_list.empty()
-            ? 0
-            : probes_list[(size_t)std::floor(0.99 * (probes_list.size() - 1))];
-    uint64_t maxp = probes_list.empty() ? 0 : probes_list.back();
-    double avg = 0.0;
-    for (auto v : probes_list)
-      avg += (double)v;
-    if (!probes_list.empty())
-      avg /= (double)probes_list.size();
-
-    json out;
-    out["count"] = count;
-    out["found"] = found;
-    out["avg_probes"] = avg;
-    out["p99_probes"] = p99;
-    out["max_probes"] = maxp;
-    res.set_content(out.dump(), "application/json");
-  });
-
-  // GET /api/experiment/kick_depth_hist
-  // In-memory histogram (cleared on /api/init). Still useful for frontend
-  // charting.
-  app.Get("/api/experiment/kick_depth_hist",
-          [&](const httplib::Request &, httplib::Response &res) {
-            auto hist = ht.kick_hist_snapshot();
-            json out;
-            out["hist"] = json::array();
-            for (size_t d = 0; d < hist.size(); d++) {
-              out["hist"].push_back(
-                  {{"depth", static_cast<int>(d)}, {"count", hist[d]}});
-            }
-            res.set_content(out.dump(), "application/json");
-          });
-
-  // POST /api/experiment/probe_vs_n { ns:[], ks:[], inserts, queries }
-  // Warning: will re-init table multiple times (slow, destructive).
-  app.Post("/api/experiment/probe_vs_n", [&](const httplib::Request &req,
-                                             httplib::Response &res) {
-    log.warn("probe_vs_n starts (will re-init table multiple times)");
-    json in = json::parse(req.body.empty() ? "{}" : req.body);
-    auto ns =
-        in.contains("ns") ? in["ns"] : json::array({10000, 30000, 100000});
-    auto ks = in.contains("ks") ? in["ks"] : json::array({1, 2, 3});
-    uint64_t inserts = j_u64(in, "inserts", 20000);
-    uint64_t queries = j_u64(in, "queries", 5000);
-
-    json out;
-    out["series"] = json::array();
-
-    for (auto &kJ : ks) {
-      int k = kJ.get<int>();
-      json series;
-      series["k"] = k;
-      series["points"] = json::array();
-
-      for (auto &nJ : ns) {
-        uint64_t n = nJ.get<uint64_t>();
-        db.exec("DROP TABLE IF EXISTS ht_meta");
-        auto p = ht.load_or_init_meta(n, k, 0.98, std::nullopt, std::nullopt,
-                                      std::nullopt);
-        auto initr = ht.init_table(p);
-        if (!initr.ok) {
-          series["points"].push_back({{"n", n}, {"error", initr.error}});
-          continue;
-        }
-
-        // insert a subset (avoid filling full n for speed)
-        uint64_t to_insert = std::min<uint64_t>(inserts, n);
-        uint64_t seed = p.seed2 ^ 0x1234;
-        for (uint64_t i = 0; i < to_insert; i++) {
-          uint64_t key = splitmix64(seed + i);
-          (void)ht.insert_key(p, key, false);
-        }
-
-        // query test (all misses/hits mixed)
-        json qt_in;
-        qt_in["count"] = queries;
-        qt_in["hit_rate"] = 0.5;
-        qt_in["seed"] = p.seed1 ^ 0x8888;
-        // reuse local logic instead of HTTP call
-        std::vector<uint64_t> probes_list;
-        probes_list.reserve(queries);
-        uint64_t found = 0;
-        for (uint64_t i = 0; i < queries; i++) {
-          bool want_hit = ((double)(splitmix64(seed + i) & 0xFFFFFFFFu) /
-                           (double)0x100000000ULL) < 0.5;
-          uint64_t key = want_hit
-                             ? (splitmix64(seed ^ (i + 11)) % (p.n + 1))
-                             : (splitmix64(seed ^ (i + 11)) + (1ULL << 60));
-          auto r = ht.find_key(p, key);
-          probes_list.push_back(r.probes);
-          if (r.ok)
-            found++;
-        }
-        std::sort(probes_list.begin(), probes_list.end());
-        auto p99 = probes_list.empty() ? 0
-                                       : probes_list[(size_t)std::floor(
-                                             0.99 * (probes_list.size() - 1))];
-        uint64_t maxp = probes_list.empty() ? 0 : probes_list.back();
-        double avg = 0.0;
-        for (auto v : probes_list)
-          avg += (double)v;
-        if (!probes_list.empty())
-          avg /= (double)probes_list.size();
-
-        series["points"].push_back({{"n", n},
-                                    {"avg_probes", avg},
-                                    {"p99_probes", p99},
-                                    {"max_probes", maxp}});
+  app.Post("/api/analytics/snapshots", [&](const httplib::Request &,
+                                            httplib::Response &res) {
+    try {
+      std::lock_guard<std::mutex> lk(service_mu);
+      if (!storage) {
+        respond_json(res, json{{"ok", false}, {"error", "not_initialized"}}, 400);
+        return;
       }
-      out["series"].push_back(series);
+      const std::string raw = storage->analytics_list_snapshots_json();
+      json items = json::parse(raw);
+      respond_json(res, json{{"ok", true}, {"items", items}}, 200);
+    } catch (const std::exception &e) {
+      respond_json(res, json{{"ok", false}, {"error", e.what()}}, 500);
     }
-
-    res.set_content(out.dump(), "application/json");
-    log.warn("probe_vs_n done");
   });
 
-  // POST /api/experiment/fallback_vs_load { n,k, load_targets:[], step,
-  // distribution } Warning: will re-init table (destructive).
-  app.Post("/api/experiment/fallback_vs_load", [&](const httplib::Request &req,
-                                                   httplib::Response &res) {
-    log.warn("fallback_vs_load starts (will re-init table)");
-    json in = json::parse(req.body.empty() ? "{}" : req.body);
-    uint64_t n = j_u64(in, "n", 100000);
-    int k = j_i(in, "k", 2);
-    auto targets = in.contains("load_targets")
-                       ? in["load_targets"]
-                       : json::array({0.7, 0.8, 0.9, 0.95, 0.98});
-    uint64_t step = j_u64(in, "step", 2000);
-    std::string dist = in.contains("distribution")
-                           ? in["distribution"].get<std::string>()
-                           : "uniform";
-    double skew = j_d(in, "skew", 1.2);
-
-    db.exec("DROP TABLE IF EXISTS ht_meta");
-    auto p = ht.load_or_init_meta(n, k, 0.98, std::nullopt, std::nullopt,
-                                  std::nullopt);
-    auto initr = ht.init_table(p);
-    json out;
-    out["ok"] = initr.ok;
-    if (!initr.ok) {
-      out["error"] = initr.error;
-      res.set_content(out.dump(), "application/json");
-      return;
+  app.Post("/api/analytics/summary", [&](const httplib::Request &req,
+                                         httplib::Response &res) {
+    try {
+      json in = parse_json_body_or_throw(req);
+      int64_t sid = static_cast<int64_t>(j_u64(in, "snapshot_id", 0));
+      std::lock_guard<std::mutex> lk(service_mu);
+      if (!storage) {
+        respond_json(res, json{{"ok", false}, {"error", "not_initialized"}}, 400);
+        return;
+      }
+      if (sid <= 0)
+        sid = active_snapshot_id;
+      if (sid <= 0) {
+        respond_json(res,
+                     json{{"ok", false}, {"error", "no_snapshot_selected"}}, 400);
+        return;
+      }
+      json summary = json::parse(storage->analytics_summary_json(sid));
+      respond_json(res, json{{"ok", true}, {"summary", summary}}, 200);
+    } catch (const std::exception &e) {
+      respond_json(res, json{{"ok", false}, {"error", e.what()}}, 500);
     }
+  });
 
-    uint64_t seed = p.seed2 ^ 0xCAFEBABEULL;
-    uint64_t key_space = n * 10;
-    uint64_t inserted = 0;
+  app.Post("/api/analytics/structure_dump", [&](const httplib::Request &req,
+                                                httplib::Response &res) {
+    try {
+      json in = parse_json_body_or_throw(req);
+      int64_t sid = static_cast<int64_t>(j_u64(in, "snapshot_id", 0));
+      std::lock_guard<std::mutex> lk(service_mu);
+      if (!storage) {
+        respond_json(res, json{{"ok", false}, {"error", "not_initialized"}}, 400);
+        return;
+      }
+      if (sid <= 0)
+        sid = active_snapshot_id;
+      if (sid <= 0) {
+        respond_json(res,
+                     json{{"ok", false}, {"error", "no_snapshot_selected"}}, 400);
+        return;
+      }
+      const auto dr = dump_structure_to_storage(storage.get(), ht, sid);
+      respond_json(res,
+                   json{{"ok", dr.ok},
+                        {"error", dr.ok ? "" : dr.error},
+                        {"snapshot_id", sid}},
+                   dr.ok ? 200 : 500);
+    } catch (const std::exception &e) {
+      respond_json(res, json{{"ok", false}, {"error", e.what()}}, 400);
+    }
+  });
 
-    out["points"] = json::array();
-    for (auto &tJ : targets) {
-      double target = tJ.get<double>();
-      // insert until reaching target load
-      while (true) {
-        auto st = ht.stats(p);
-        double load = p.capacity_slots
-                          ? (double)st.used_slots / (double)p.capacity_slots
-                          : 0.0;
-        if (load >= target)
-          break;
+  // POST /api/jobs/get { id }
+  // 轮询实验进度/结果。
+  app.Post("/api/jobs/get", [&](const httplib::Request &req,
+                                httplib::Response &res) {
+    try {
+      json in = parse_json_body_or_throw(req);
+      const std::string id = j_s(in, "id", "");
+      if (id.empty()) {
+        respond_json(res, json{{"ok", false}, {"error", "missing_id"}}, 400);
+        return;
+      }
+      std::lock_guard<std::mutex> lk(jobs_mu);
+      auto it = jobs.find(id);
+      if (it == jobs.end()) {
+        respond_json(res, json{{"ok", false}, {"error", "job_not_found"}}, 404);
+        return;
+      }
+      const auto &j = it->second;
+      respond_json(res,
+                   json{{"ok", true},
+                        {"error", ""},
+                        {"id", j.id},
+                        {"kind", j.kind},
+                        {"status", j.status},
+                        {"progress", j.progress},
+                        {"message", j.message},
+                        {"result", j.result},
+                        {"job_error", j.error}},
+                   200);
+    } catch (const std::exception &e) {
+      respond_json(res, json{{"ok", false}, {"error", e.what()}}, 400);
+    }
+  });
 
-        auto t0 = std::chrono::high_resolution_clock::now();
-        for (uint64_t i = 0; i < step; i++) {
-          uint64_t key;
-          if (dist == "skewed") {
-            uint64_t r = splitmix64(seed + inserted + i) % key_space;
-            double u =
-                (double)(splitmix64(seed ^ (inserted + i + 17)) & 0xFFFFFFFFu) /
-                (double)0x100000000ULL;
-            double x = std::pow(std::max(1e-12, u), -skew);
-            key = (static_cast<uint64_t>(x) + r) % key_space;
-          } else {
-            key = splitmix64(seed + inserted + i) % key_space;
+  app.Post("/api/experiment/o1_vs_n", [&](const httplib::Request &req,
+                                          httplib::Response &res) {
+    try {
+      json in = parse_json_body_or_throw(req);
+      const int k = j_i(in, "k", 2);
+      const double inserts_factor = j_d(in, "inserts_factor", 0.5);
+      const int query_samples = j_i(in, "query_samples", 2000);
+      std::vector<uint64_t> ns;
+      if (in.contains("ns") && in["ns"].is_array()) {
+        for (auto &x : in["ns"])
+          ns.push_back(x.get<uint64_t>());
+      } else {
+        ns = {10000, 20000, 30000, 40000};
+      }
+
+      // async job with progress
+      std::string job_id;
+      {
+        std::lock_guard<std::mutex> lk(jobs_mu);
+        job_id = new_job_id();
+        jobs[job_id] = JobState{.id = job_id,
+                                .kind = "o1_vs_n",
+                                .status = "running",
+                                .progress = 0,
+                                .message = "queued",
+                                .result = json::object(),
+                                .error = ""};
+      }
+
+      std::thread([=, &ht, &storage, &service_mu, &jobs_mu, &jobs]() {
+        try {
+          {
+            std::lock_guard<std::mutex> jl(jobs_mu);
+            jobs[job_id].message = "starting";
+            jobs[job_id].progress = 1;
           }
-          (void)ht.insert_key(p, key, false);
+
+          std::lock_guard<std::mutex> lk(service_mu);
+          if (!storage) {
+            std::lock_guard<std::mutex> jl(jobs_mu);
+            jobs[job_id].status = "error";
+            jobs[job_id].error = "not_initialized";
+            jobs[job_id].progress = 100;
+            return;
+          }
+
+          std::mt19937_64 rng(42);
+          json points = json::array();
+          const size_t total = ns.size();
+
+          for (size_t idx = 0; idx < total; idx++) {
+            const uint64_t n = ns[idx];
+            {
+              std::lock_guard<std::mutex> jl(jobs_mu);
+              jobs[job_id].message = "n=" + std::to_string(n);
+              jobs[job_id].progress = static_cast<int>(
+                  std::floor((idx * 100.0) / std::max<size_t>(1, total)));
+            }
+
+            TableParams p;
+            p.n = n;
+            p.k = k;
+            (void)ht.init(p);
+
+            const uint64_t inserts =
+                static_cast<uint64_t>(std::max(1.0, n * inserts_factor));
+            std::vector<uint64_t> keys;
+            keys.reserve(static_cast<size_t>(inserts));
+            for (uint64_t i = 0; i < inserts; i++) {
+              uint64_t key = rng();
+              keys.push_back(key);
+              (void)ht.insert(key);
+            }
+
+            LocalHist hist;
+            for (int i = 0; i < query_samples; i++) {
+              const uint64_t key =
+                  keys.empty() ? rng()
+                               : keys[static_cast<size_t>(rng() % keys.size())];
+              const auto t0 = std::chrono::high_resolution_clock::now();
+              (void)ht.query(key);
+              const auto t1 = std::chrono::high_resolution_clock::now();
+              hist.add(static_cast<uint64_t>(
+                  std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)
+                      .count()));
+            }
+
+            points.push_back(json{{"n", n},
+                                  {"query_p50_ns", hist.p50()},
+                                  {"query_p99_ns", hist.p99()},
+                                  {"query_max_ns", hist.max()}});
+          }
+
+          {
+            std::lock_guard<std::mutex> jl(jobs_mu);
+            jobs[job_id].status = "done";
+            jobs[job_id].progress = 100;
+            jobs[job_id].message = "done";
+            jobs[job_id].result = json{{"ok", true},
+                                       {"kind", "o1_vs_n"},
+                                       {"k", k},
+                                       {"points", points}};
+          }
+        } catch (const std::exception &e) {
+          std::lock_guard<std::mutex> jl(jobs_mu);
+          jobs[job_id].status = "error";
+          jobs[job_id].progress = 100;
+          jobs[job_id].error = e.what();
         }
-        auto t1 = std::chrono::high_resolution_clock::now();
-        (void)t0;
-        (void)t1;
-        inserted += step;
+      }).detach();
+
+      respond_json(res, json{{"ok", true}, {"error", ""}, {"job_id", job_id}},
+                   200);
+    } catch (const std::exception &e) {
+      respond_json(res, json{{"ok", false}, {"error", e.what()}}, 400);
+    }
+  });
+
+  // POST /api/experiment/ok_vs_k
+  // { n?: number, ks?: number[], inserts_factor?: number }
+  //
+  // 说明：固定 n，遍历 k，测 insert/delete HT-only 延迟与空间估计。
+  app.Post("/api/experiment/ok_vs_k", [&](const httplib::Request &req,
+                                          httplib::Response &res) {
+    try {
+      json in = parse_json_body_or_throw(req);
+      const uint64_t n = j_u64(in, "n", 100000);
+      const double inserts_factor = j_d(in, "inserts_factor", 0.5);
+      std::vector<int> ks;
+      if (in.contains("ks") && in["ks"].is_array()) {
+        for (auto &x : in["ks"])
+          ks.push_back(x.get<int>());
+      } else {
+        ks = {1, 2, 3, 4};
       }
 
-      auto st = ht.stats(p);
-      double load = p.capacity_slots
-                        ? (double)st.used_slots / (double)p.capacity_slots
-                        : 0.0;
-      double fb_ratio = st.used_slots
-                            ? (double)st.fallback_used / (double)st.used_slots
-                            : 0.0;
-      out["points"].push_back({{"target", target},
-                               {"load", load},
-                               {"fallback_used", st.fallback_used},
-                               {"fallback_ratio", fb_ratio},
-                               {"used_slots", st.used_slots}});
+      std::string job_id;
+      {
+        std::lock_guard<std::mutex> lk(jobs_mu);
+        job_id = new_job_id();
+        jobs[job_id] = JobState{.id = job_id,
+                                .kind = "ok_vs_k",
+                                .status = "running",
+                                .progress = 0,
+                                .message = "queued",
+                                .result = json::object(),
+                                .error = ""};
+      }
+
+      std::thread([=, &ht, &storage, &service_mu, &jobs_mu, &jobs]() {
+        try {
+          {
+            std::lock_guard<std::mutex> jl(jobs_mu);
+            jobs[job_id].message = "starting";
+            jobs[job_id].progress = 1;
+          }
+
+          std::lock_guard<std::mutex> lk(service_mu);
+          if (!storage) {
+            std::lock_guard<std::mutex> jl(jobs_mu);
+            jobs[job_id].status = "error";
+            jobs[job_id].error = "not_initialized";
+            jobs[job_id].progress = 100;
+            return;
+          }
+
+          std::mt19937_64 rng(43);
+          json series = json::array();
+          const size_t total = ks.size();
+
+          for (size_t idx = 0; idx < total; idx++) {
+            const int k = ks[idx];
+            {
+              std::lock_guard<std::mutex> jl(jobs_mu);
+              jobs[job_id].message = "k=" + std::to_string(k);
+              jobs[job_id].progress = static_cast<int>(
+                  std::floor((idx * 100.0) / std::max<size_t>(1, total)));
+            }
+
+            TableParams p;
+            p.n = n;
+            p.k = k;
+            (void)ht.init(p);
+
+            const uint64_t inserts =
+                static_cast<uint64_t>(std::max(1.0, n * inserts_factor));
+            std::vector<uint64_t> keys;
+            keys.reserve(static_cast<size_t>(inserts));
+            LocalHist insHist;
+            for (uint64_t i = 0; i < inserts; i++) {
+              uint64_t key = rng();
+              keys.push_back(key);
+              const auto t0 = std::chrono::high_resolution_clock::now();
+              (void)ht.insert(key);
+              const auto t1 = std::chrono::high_resolution_clock::now();
+              insHist.add(static_cast<uint64_t>(
+                  std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)
+                      .count()));
+            }
+
+            LocalHist delHist;
+            const uint64_t dels = inserts / 2;
+            for (uint64_t i = 0; i < dels; i++) {
+              const auto t0 = std::chrono::high_resolution_clock::now();
+              (void)ht.erase(keys[static_cast<size_t>(i)]);
+              const auto t1 = std::chrono::high_resolution_clock::now();
+              delHist.add(static_cast<uint64_t>(
+                  std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)
+                      .count()));
+            }
+
+            const auto ms = global_metrics().snapshot();
+            const auto st = ht.state();
+            const double n_d = static_cast<double>(std::max<uint64_t>(1, st.n));
+            const double lower_per_key = 64.0 - std::log2(n_d);
+            const double lower_bits = lower_per_key * n_d;
+            const double payload_bits = 64.0 * n_d;
+            const double meta_bits = static_cast<double>(ms.meta_bits_max);
+            const double total_bits = payload_bits + meta_bits;
+            const double wasted_bpk = (total_bits - lower_bits) / n_d;
+
+            series.push_back(json{{"k", k},
+                                  {"insert_p50_ns", insHist.p50()},
+                                  {"insert_p99_ns", insHist.p99()},
+                                  {"delete_p50_ns", delHist.p50()},
+                                  {"delete_p99_ns", delHist.p99()},
+                                  {"wasted_bits_per_key_est", wasted_bpk}});
+          }
+
+          {
+            std::lock_guard<std::mutex> jl(jobs_mu);
+            jobs[job_id].status = "done";
+            jobs[job_id].progress = 100;
+            jobs[job_id].message = "done";
+            jobs[job_id].result = json{{"ok", true},
+                                       {"kind", "ok_vs_k"},
+                                       {"n", n},
+                                       {"series", series}};
+          }
+        } catch (const std::exception &e) {
+          std::lock_guard<std::mutex> jl(jobs_mu);
+          jobs[job_id].status = "error";
+          jobs[job_id].progress = 100;
+          jobs[job_id].error = e.what();
+        }
+      }).detach();
+
+      respond_json(res, json{{"ok", true}, {"error", ""}, {"job_id", job_id}},
+                   200);
+    } catch (const std::exception &e) {
+      respond_json(res, json{{"ok", false}, {"error", e.what()}}, 400);
     }
-
-    res.set_content(out.dump(), "application/json");
-    log.warn("fallback_vs_load done");
   });
-
-  // GET /api/stats
-  app.Get("/api/stats", [&](const httplib::Request &, httplib::Response &res) {
-    auto p = ht.load_or_init_meta(100000, 2, 0.98, std::nullopt, std::nullopt,
-                                  std::nullopt);
-    auto s = ht.stats(p);
-    auto rz = ht.read_resize_state_snapshot();
-    json out{
-        {"used_slots", s.used_slots},
-        {"fallback_used", s.fallback_used},
-        {"capacity_slots", p.capacity_slots},
-        {"load_factor", p.capacity_slots
-                            ? (double)s.used_slots / (double)p.capacity_slots
-                            : 0.0},
-        {"resize", rz ? json{{"is_resizing", rz->is_resizing},
-                             {"resize_progress", rz->resize_progress},
-                             {"total_bins", rz->total_bins},
-                             {"new_total_bins", rz->new_total_bins},
-                             {"started_at_ms", rz->started_at_ms},
-                             {"migrated_keys", rz->migrated_keys},
-                             {"last_step_ms", rz->last_step_ms},
-                             {"elapsed_ms", rz->elapsed_ms},
-                             {"finished_total_ms", rz->finished_total_ms}}
-                      : json{{"is_resizing", false}}},
-        {"params",
-         {{"n", p.n},
-          {"mini_bin_size", p.mini_bin_size},
-          {"num_mini_bins", p.num_mini_bins},
-          {"fallback_size", p.fallback_size},
-          {"bin_size", p.bin_size},
-          {"total_bins", p.total_bins},
-          {"capacity_slots", p.capacity_slots}}},
-    };
-    res.set_content(out.dump(), "application/json");
-  });
-
-  // GET /api/bins?start=0&count=200
-  app.Get("/api/bins",
-          [&](const httplib::Request &req, httplib::Response &res) {
-            auto p = ht.load_or_init_meta(100000, 2, 0.98, std::nullopt,
-                                          std::nullopt, std::nullopt);
-            uint64_t start = q_u64(req, "start", 0);
-            uint64_t count = q_u64(req, "count", 200);
-            count = std::min<uint64_t>(count, 2000);
-
-            auto bins = ht.bin_stats(p, start, count);
-            json out;
-            out["bin_start"] = start;
-            out["bin_count"] = count;
-            out["total_bins"] = p.total_bins;
-            out["bin_size"] = p.bin_size;
-            out["mini_bin_size"] = p.mini_bin_size;
-            out["num_mini_bins"] = p.num_mini_bins;
-            out["fallback_size"] = p.fallback_size;
-            out["bins"] = json::array();
-            for (const auto &b : bins) {
-              out["bins"].push_back({{"bin", b.bin},
-                                     {"used_slots", b.used_slots},
-                                     {"fallback_used", b.fallback_used}});
-            }
-            res.set_content(out.dump(), "application/json");
-          });
-
-  // GET /api/snapshot?bin_start=0&bin_count=50
-  app.Get("/api/snapshot",
-          [&](const httplib::Request &req, httplib::Response &res) {
-            auto p = ht.load_or_init_meta(100000, 2, 0.98, std::nullopt,
-                                          std::nullopt, std::nullopt);
-            uint64_t bin_start = q_u64(req, "bin_start", 0);
-            uint64_t bin_count = q_u64(req, "bin_count", 50);
-            bin_count = std::min<uint64_t>(bin_count, 200);
-
-            auto snap = ht.snapshot_bins(p, bin_start, bin_count);
-            json out;
-            out["bin_start"] = bin_start;
-            out["bin_count"] = bin_count;
-            out["bin_size"] = p.bin_size;
-            out["mini_total"] = p.mini_bin_size * p.num_mini_bins;
-            out["slots"] = json::array();
-            for (const auto &row : snap) {
-              // row = [idx, fp, reserved]
-              // Frontend expects `is_used` (and may read kick_depth). Keep
-              // backward-compatible fields.
-              uint64_t fp = row[1];
-              out["slots"].push_back({{"idx", row[0]},
-                                      {"fp", fp},
-                                      {"is_used", fp ? 1 : 0},
-                                      {"kick_depth", 0}});
-            }
-            res.set_content(out.dump(), "application/json");
-          });
 
   if (!app.listen(srv_cfg.bind_host, srv_cfg.port)) {
     throw std::runtime_error("failed to listen");

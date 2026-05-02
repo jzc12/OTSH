@@ -1,35 +1,38 @@
 #pragma once
 
-#include <stdint.h>
+#include <cstdint>
 #include <string>
 
 namespace otsh {
 
-struct DbConfig {
-  std::string host = "127.0.0.1";
-  uint16_t port = 3306;
-  std::string user = "root";
-  std::string password = "";
-  std::string database = "otsh";
+struct ServerConfig {
+  std::string bind_host = "0.0.0.0";
+  int port = 8080;
 };
 
+// 与设计文档一致：只暴露 init/insert/delete/query 四类操作。
 struct TableParams {
-  uint64_t n = 10000;        // 数据量
-  int k = 2;                 // 踢出深度边界
-  double load_factor = 0.90; // 目标负载因子
+  uint64_t n = 10000;        // 规模参数（N 会取 2^p，使 N <= n <= 2N）
+  int k = 2;                 // 保留（对接设计文档的 k-kick 层数参数）
+  double load_factor = 0.90; // 保留（扩容阈值/工程参数）
 
-  uint64_t seed1 = 0; // bin 哈希种子
-  uint64_t seed2 = 0; // pref/kick 种子
-  uint64_t seed3 = 0; // fingerprint 种子
+  // 用于可逆置换 pi 以及其他哈希/随机选择的种子
+  uint64_t seed1 = 0;
+  uint64_t seed2 = 0;
+  uint64_t seed3 = 0;
 
-  uint32_t fingerprint_bits = 16; // 固定为 16 按设计文档
+  std::string storage = "mysql";
 
-  uint64_t mini_bin_size = 0;  // mini-bin 大小
-  uint64_t num_mini_bins = 0;  // mini-bin 数量
-  uint64_t fallback_size = 4;  // fallback 大小
-  uint64_t bin_size = 0;       // bin 大小
-  uint64_t total_bins = 0;     // 总 bin 数量
-  uint64_t capacity_slots = 0; // total_bins * bin_size
+  // file/sqlite：文件路径
+  std::string storage_path = "otsh.data";
+
+  // mysql：连接信息（默认仅用于 storage=="mysql"）
+  std::string mysql_host = "127.0.0.1";
+  uint16_t mysql_port = 3306;
+  std::string mysql_user = "root";
+  std::string mysql_password = "12345678";
+  std::string mysql_database = "otsh";
+  std::string mysql_table = "otsh_keys";
 };
 
 } // namespace otsh

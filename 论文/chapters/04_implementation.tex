@@ -1,45 +1,22 @@
-\chapter{核心算法与实现}
+\chapter{实现要点}
+\label{ch:impl}
 
-\section{系统与模块划分}
-后端使用 C++20 实现，HTTP 框架采用 \texttt{cpp-httplib}\cite{cpphttplib}，JSON 解析采用 \texttt{nlohmann/json}\cite{nlohmannjson}，并通过 MySQL C API 访问数据库\cite{mysqlmanual}。实现主要可分为如下模块：哈希函数与指纹（\texttt{hash}）、哈希表操作与参数派生（\texttt{ht}）、数据库封装（\texttt{db}）、在线扩容（\texttt{resize}）以及 HTTP 路由（\texttt{http\_server}）。前端使用 Vue 3\cite{vue3} + TypeScript 通过 \texttt{/api} 接口调用后端，并提供结构快照与实验结果的可视化展示。\par
+\section{技术栈与运行形态}
+后端采用 C++20，基于 HTTP 暴露初始化、插入、查询、删除与统计接口（依赖如 \texttt{cpp-httplib}\cite{cpphttplib} 与 \texttt{nlohmann/json}\cite{nlohmannjson}）；持久化与实验数据使用 MySQL\cite{mysqlmanual}；前端采用 Vue 3\cite{vue3} 组织实验面板与图表展示。该划分便于将“热路径内存结构”与“冷路径审计落库”解耦。
 
-\section{查询算法}
-\label{sec:alg_find}
-查询目标是在不扫描整表的情况下验证键是否存在。对任意键 \(x\)，首先计算其指纹 \(\mathrm{fp}(x)\) 以及对应的 \(b,m\)，随后按两段连续区间进行验证：
-\begin{enumerate}
-  \item 探测 1：扫描偏好 mini-bin 对应的 \(\mathrm{idx}\) 区间，若存在 \texttt{key}=x 且 \texttt{fp}=\(\mathrm{fp}(x)\) 的记录则返回命中；
-  \item 探测 2：若未命中，则扫描同一 bin 的 fallback 区间，若命中则返回；否则返回未找到。
-\end{enumerate}
-在实现中，\texttt{probes} 定义为“区间扫描次数”，每执行一次范围查询（\texttt{idx BETWEEN start AND end}）则 \texttt{probes} 加 1。因此一次查询的 \texttt{probes} 在结构意义上被约束为 2（无并发扩容与异常情况时）。
+\section{核心数据结构映射}
+第 \ref{ch:design} 章所述类型与实现一一对应：全局 \texttt{HashTable} 持有 \(n,N,K\)、\texttt{Facility*} 数组、\texttt{ResizeManager}、\texttt{RebuildScheduler} 及可逆置换 \texttt{PermutationHash}（32 位分半 Feistel 三轮，密钥字段 \texttt{k1..k4}）。每个 \texttt{Facility} 含 \texttt{MiniArray D}、\texttt{cubbies} 列表、\texttt{tail} 指针及 \texttt{tier\_counts}。\texttt{Cubby} 含 \texttt{tier}、\texttt{capacity}、\texttt{size}、载荷向量 \texttt{S}、\texttt{MiniArray Meta} 与 \texttt{FreeSlotTree}（线性化位图，支持 \texttt{find\_free}/\texttt{mark\_used}/\texttt{mark\_free}）。
 
-\section{插入算法：有界深度 k-kick 与 fallback 兜底}
-\label{sec:alg_insert}
-插入包含两层目标：尽可能把键放入偏好 mini-bin（便于查询只扫描两段区间），并在冲突时通过有限步置换腾挪空间。本文实现的插入策略如下：
-\begin{itemize}
-  \item \textbf{优先填充}：若偏好 mini-bin 存在空槽，直接写入该槽；
-  \item \textbf{置换链}：若偏好 mini-bin 满，执行深度不超过 \(k\) 的踢出过程。与在数据库中随机选择踢出槽不同，本文使用与 \(\mathrm{fp}\)、深度与种子相关的确定性函数选择踢出位置，以避免 \texttt{ORDER BY RAND()} 等高代价操作；
-  \item \textbf{fallback 兜底}：当置换深度超过 \(k\) 或置换无法继续时，将当前被踢出的元素（或最终元素）放入该 bin 的 fallback 区域；若 fallback 已满，则插入失败。
-\end{itemize}
+\texttt{MetaEntry} 逻辑上划分为商压缩字段（\texttt{delta}、\texttt{mid\_bits}）、路由辅助（\texttt{router\_bits}）与插入元数据（\texttt{insert\_bits}）；编码为变长比特串后写入 MiniArray。MiniArray 内部为 packed B-树加查表，满足“总空间与总比特数线性、单点访问均摊常数”的工程目标。
 
-为减少数据库往返，插入实现采用“bin 级锁定 + 内存模拟 + 批量写回”的方式：在事务中一次性锁定目标 bin 的所有槽位（一次范围查询），在内存中模拟踢出链并记录变更槽集合，最后用 \texttt{UPDATE ... CASE} 将变更批量写回。该策略在保证正确性的同时，显著减少了踢出链中逐槽 \texttt{SELECT FOR UPDATE} 的开销。
+\section{算法伪代码与代码对应}
+插入路径与第 \ref{ch:design} 章一致：计算 \(g_x=\pi(x)\)，拆分设施索引 \(r\) 与路由索引 \(b\)，取 \texttt{F.D[b]}，在 tail cubby 内完成 k-kick 探测循环，写 \texttt{S[slot]} 与 \texttt{Meta}，更新路由器，调用不变量维护。查询路径仅经路由器定位 \((I,i)\)，再 \texttt{Meta.access(i)} 与 \texttt{reconstruct}。删除路径在清槽后按是否 tail 决定是否从 tail 搬迁，并在 tail 空时回收与晋升新 tail。
 
-\section{删除算法}
-删除操作首先通过唯一约束在 \texttt{key} 上定位 \texttt{idx}，若存在则把该槽位更新为空（\texttt{key=NULL, fp=0}）。删除本身不触发重排；在高负载环境下，可通过再插入或扩容恢复局部空槽分布。
+\section{不变量维护与重建}
+\texttt{maintainInvariants(Facility*)} 遍历 tier，若计数低于 \(t_j/2\) 调用 \texttt{rebuildUp(j)}（拆分高 tier），高于 \(3t_j\) 调用 \texttt{rebuildDown(j)}（合并一组 \(j\) 级 cubby）。实现细节包括：合并时创建 \(j{+}1\) 级新 cubby 并逐元素插入；拆分时从高 tier 取一枚大 cubby，随机分配元素到 \(t_j\) 个小 cubby 并分别重建。
 
-\section{在线扩容}
-\label{sec:resize}
-在线扩容旨在当负载超过阈值时扩大表容量并保持接口可用。本文实现采用双表迁移策略：
-\begin{enumerate}
-  \item 触发：批量插入前估算插入结束时负载，若预计超过阈值，则启动扩容；
-  \item 创建 next 表：构建 \texttt{hash\_table\_next}，行数为 \(\mathrm{new\_total\_bins}\times \mathrm{bin\_size}\)，并批量写入空槽；
-  \item 分步迁移：以 bin 为单位迁移每个旧 bin 中的非空键到 next 表（每步一个短事务），更新进度指标供前端展示；
-  \item 原子换表：迁移完成后使用 \texttt{RENAME TABLE} 将 next 表交换为主表，并删除旧表；
-  \item 持久化规模：将 \(\mathrm{total\_bins}\) 与名义容量（\texttt{ht\_meta.n}）写回元数据。
-\end{enumerate}
-该实现将扩容进度与耗时统计保存在进程内状态中，并通过统计接口返回给前端，用于显示扩容进度与耗时。
+\section{扩容与缩容}
+当 \(n\) 超过当前容量上界触发向新表迁移（\texttt{ResizeManager} 持有 \texttt{newh} 与进度）；当 \(n<\) 容量 \(/4\) 触发收缩。双表迁移将重建与前台操作交错，避免长时间停顿（具体调度以实现为准）。
 
-\section{HTTP 接口与前端交互}
-后端对外提供如下典型接口：初始化（\texttt{POST /api/init}）、单键操作（\texttt{/api/insert, /api/find, /api/erase}）、统计与可视化（\texttt{GET /api/stats, /api/snapshot, /api/bins}）以及实验接口（\texttt{/api/query\_test} 与 \texttt{/api/experiment/*}）。前端提供初始化表、批量插入、查询测试与实验运行等操作入口，并将结构快照与实验曲线以图表方式展示。\par
-
-接口的具体字段与附录中的 JSON 示例保持一致（见附录）。
-
+\section{数据库与观测}
+见第 \ref{ch:exp} 章与附录：指标表 \texttt{metrics} 记录每次操作的 \texttt{probe\_count}、\texttt{kick\_count}、延迟与 \texttt{cubby\_tier}；快照表记录 cubby、tier 与槽位占用，用于验证分布与负载。写入采用线程本地缓冲批量 flush，避免每次操作直连数据库。

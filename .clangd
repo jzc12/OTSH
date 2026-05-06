@@ -2,7 +2,7 @@ CompileFlags:
   CompilationDatabase: build
   Add:
     [
-      -Ibackend-cpp/include,
+      -Iinclude,
       --gcc-toolchain=E:/jzc/msys/ucrt64,
       --target=x86_64-w64-windows-gnu,
       --sysroot=E:/jzc/msys/ucrt64,

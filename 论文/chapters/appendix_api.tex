@@ -1,32 +1,97 @@
-\chapter{接口与实现补充材料}
+\chapter{接口与数据模式补充}
 
-\section{主要 HTTP API}
-本文系统通过 HTTP 提供操作与实验接口，典型接口如下（具体字段以实现为准）：
+\section{主要 HTTP API（以实现为准）}
+后端通过 HTTP 暴露操作与实验接口：热路径维护内存结构，指标与快照异步落库。典型路由包括：
 \begin{itemize}
-  \item \textbf{健康检查}：\texttt{GET /health}，返回 \texttt{ok}；
-  \item \textbf{初始化}：\texttt{POST /api/init}，请求体包含 \texttt{n, k, load\_factor}（可选 \texttt{seed1/2/3}），返回派生参数（\texttt{mini\_bin\_size, num\_mini\_bins, bin\_size, total\_bins, capacity\_slots} 等）；
-  \item \textbf{单键插入}：\texttt{POST /api/insert}，请求体 \texttt{\{key, trace?\}}，返回 \texttt{ok, probes, fp, bin, mini}，当 \texttt{trace=true} 时返回踢出链步骤；
-  \item \textbf{单键查询}：\texttt{POST /api/find}，请求体 \texttt{\{key\}}，返回 \texttt{found, probes}；
-  \item \textbf{单键删除}：\texttt{POST /api/erase}，请求体 \texttt{\{key\}}，返回 \texttt{ok, probes}；
-  \item \textbf{统计}：\texttt{GET /api/stats}，返回 \texttt{used\_slots, fallback\_used, capacity\_slots, load\_factor}，以及扩容状态摘要；
-  \item \textbf{bin 统计}：\texttt{GET /api/bins?start=\dots\&count=\dots}；
-  \item \textbf{结构快照}：\texttt{GET /api/snapshot?bin\_start=\dots\&bin\_count=\dots}；
-  \item \textbf{查询测试}：\texttt{POST /api/query\_test}，返回 \texttt{avg\_probes, p99\_probes, max\_probes}；
-  \item \textbf{实验接口}：\texttt{/api/experiment/kick\_depth\_hist}、\texttt{/api/experiment/probe\_vs\_n}、\texttt{/api/experiment/fallback\_vs\_load}。
+  \item \texttt{POST /api/init}：初始化全局参数（如 \(n,N,K\)、种子等）；
+  \item \texttt{POST /api/insert}：请求体含 \texttt{key}（及可选追踪字段），执行 tail cubby 插入与路由器更新；
+  \item \texttt{POST /api/query}：按键查询，经 \texttt{D[b]} 路由器定位 cubby 与槽位；
+  \item \texttt{POST /api/delete}：删除并维护 tail/饱和度不变量；
+  \item \texttt{POST /api/stats}：返回当前规模、负载与内部计数摘要；
+  \item \texttt{POST /api/analytics/snapshots}、\texttt{/api/analytics/summary}、\texttt{/api/analytics/structure\_dump}：列举快照、汇总指标或触发结构导出；
+  \item \texttt{POST /api/jobs/get}：异步任务轮询（若启用）；
+  \item \texttt{POST /api/experiment/o1\_vs\_n}、\texttt{/api/experiment/ok\_vs\_k}：实验脚本入口，用于扫参数并写 \texttt{metrics}。
 \end{itemize}
+具体 JSON 字段名以后端实现与前端联调为准；与健康检查类路由一并部署时，建议保留 \texttt{GET /health} 或等价探活端点。
 
-\section{数据库表结构}
-主槽位表使用全局下标作为主键，空槽用 \texttt{fp=0} 与 \texttt{key=NULL} 表示；\texttt{key} 列具有唯一约束以避免重复键。\par
+\section{关系模式}
+下列表用于快照与指标分析，而非在热路径上逐条同步整张逻辑哈希表。
 
+\subsection{\texttt{snapshot\_meta}}
 \begin{verbatim}
-CREATE TABLE hash_table (
-  idx BIGINT PRIMARY KEY,
-  key BIGINT UNSIGNED NULL,
-  fp  SMALLINT UNSIGNED NOT NULL,
-  UNIQUE KEY uk_key (key)
+CREATE TABLE snapshot_meta (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  snapshot_tag VARCHAR(64),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  n INT, N INT, K INT
 );
 \end{verbatim}
 
-\section{运行配置}
-后端通过环境变量读取数据库连接信息与服务端口等配置，例如：\texttt{DB\_HOST, DB\_PORT, DB\_USER, DB\_PASSWORD, DB\_NAME}，服务端口由 \texttt{PORT} 指定；可选 \texttt{LOG\_FILE} 输出日志文件。
+\subsection{\texttt{facility}}
+\begin{verbatim}
+CREATE TABLE facility (
+  id INT,
+  snapshot_id BIGINT,
+  tail_cubby_id INT,
+  PRIMARY KEY (id, snapshot_id)
+);
+\end{verbatim}
 
+\subsection{\texttt{cubby}}
+\begin{verbatim}
+CREATE TABLE cubby (
+  id INT AUTO_INCREMENT,
+  snapshot_id BIGINT,
+  facility_id INT,
+  tier INT,
+  capacity INT,
+  size INT,
+  is_tail BOOLEAN,
+  PRIMARY KEY (id, snapshot_id)
+);
+\end{verbatim}
+
+\subsection{\texttt{slot\_snapshot}}
+\begin{verbatim}
+CREATE TABLE slot_snapshot (
+  id BIGINT AUTO_INCREMENT,
+  snapshot_id BIGINT,
+  cubby_id INT,
+  slot_index INT,
+  occupied BOOLEAN,
+  key_hash BIGINT,
+  probe_length INT,
+  PRIMARY KEY (id)
+);
+\end{verbatim}
+
+\subsection{\texttt{tier\_stat}}
+\begin{verbatim}
+CREATE TABLE tier_stat (
+  snapshot_id BIGINT,
+  facility_id INT,
+  tier INT,
+  cubby_count INT,
+  PRIMARY KEY (snapshot_id, facility_id, tier)
+);
+\end{verbatim}
+
+\subsection{\texttt{metrics}}
+\begin{verbatim}
+CREATE TABLE metrics (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  snapshot_id BIGINT,
+  operation_type ENUM('insert','query','delete'),
+  probe_count INT,
+  kick_count INT,
+  latency_ns BIGINT,
+  cubby_tier INT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+\end{verbatim}
+
+\section{写入与快照策略}
+操作路径将 \texttt{metrics} 记录写入线程本地缓冲，按批量阈值刷入 MySQL；\texttt{slot\_snapshot}、\texttt{cubby}、\texttt{tier\_stat} 等由手工或 API 触发的快照任务填充，避免与插入关键路径强绑定。
+
+\section{运行配置}
+服务通过环境变量读取数据库连接与服务端口（如 \texttt{DB\_HOST}、\texttt{DB\_PORT}、\texttt{DB\_USER}、\texttt{DB\_PASSWORD}、\texttt{DB\_NAME}、\texttt{PORT} 等），详见部署说明。

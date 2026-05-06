@@ -1,6 +1,6 @@
 # --- CMake / C++ build outputs ---
 /build/
-/backend-cpp/build/
+/test_output/
 **/CMakeFiles/
 **/CMakeCache.txt
 **/cmake_install.cmake

@@ -1,32 +1,26 @@
-\chapter{实验设计与结果分析}
+\chapter{实验与观测设计}
+\label{ch:exp}
 
-\section{实验环境与指标}
-本文实现以数据库为存储与计算载体，实验重点关注“区间扫描次数”意义下的探针代价，并统计结构在不同负载与参数设置下的行为。主要指标包括：
-\begin{itemize}
-  \item \textbf{探针次数}：查询的 \texttt{probes}，定义为对连续 \texttt{idx} 区间进行一次范围扫描计 1 次；
-  \item \textbf{分位探针}：在多次查询测试中统计平均探针、P99 探针与最大探针；
-  \item \textbf{fallback 占比}：fallback 区域已用槽数及其占已用槽的比例；
-  \item \textbf{踢出深度分布}：插入过程中 place/kick 的深度直方图，用于观察 \(k\) 对置换链的影响。
-\end{itemize}
+\section{实验目的}
+在理论结构固定而工程参数可调的前提下，实验关注三类可观测量：（1）探针与踢出次数沿操作类型的分布；（2）各 tier cubby 的负载因子与 cubby 数量是否贴近第 \ref{ch:design} 章给出的 \(t_j\) 目标；（3）tail 行为与延迟尾部是否与理论假设一致。数据库模式为上述统计提供统一落点，便于前端复现图表。
 
-\section{实验一：查询探针与规模关系（probe vs n）}
-该实验通过 \texttt{POST /api/experiment/probe\_vs\_n} 对多组 \(n\) 与 \(k\) 重复执行 “init + 插入 + 查询测试”，输出每个点的平均探针、P99 探针与最大探针。该实验是破坏性的，会反复重建表。\par
+\section{快照与维度表}
+\texttt{snapshot\_meta} 标记一次实验或一次手工快照（\texttt{snapshot\_tag}、\(n,N,K\) 与时间戳），使多次运行可对比。\texttt{facility} 记录设施 id、所属快照与 \texttt{tail\_cubby\_id}。\texttt{cubby} 记录 \texttt{tier}、\texttt{capacity}、\texttt{size}、\texttt{is\_tail} 等，用于展示 tier 分布与利用率。
 
-\textbf{预期现象}：在固定 load factor 与结构规则下，查询探针受两段区间扫描上界约束，平均探针应接近常数；不同 \(k\) 影响插入时落入 fallback 的比例，从而可能间接影响查询命中分布与探针统计。
+\section{槽位与 tier 聚合}
+\texttt{slot\_snapshot} 按快照存储 \texttt{cubby\_id}、\texttt{slot\_index}、是否占用、可选 \texttt{key\_hash}（如 \(\pi(x)\)）及 \texttt{probe\_length}。该表刻意不存比特级 \texttt{Meta} 与路由器编码，以降低快照体积并聚焦“最终落槽与探针深度”结果。\texttt{tier\_stat} 按 \((\texttt{snapshot\_id},\texttt{facility\_id},\texttt{tier})\) 聚合 \texttt{cubby\_count}，用于对照
+\[
+  t_j \approx \frac{\bigl(\log^{(j)} n\bigr)^2}{\bigl(\log^{(j+1)} n\bigr)^2}.
+\]
 
-\section{实验二：fallback 使用与负载关系（fallback vs load）}
-该实验通过 \texttt{POST /api/experiment/fallback\_vs\_load} 将表逐步填充至多个目标负载（如 0.7、0.8、0.9、0.95、0.98），统计每个阶段的实际 load、fallback 已用槽与 fallback 占比。\par
+\section{指标表与典型 SQL}
+\texttt{metrics} 为核心事实表：\texttt{operation\_type} 取 \texttt{insert}/\texttt{query}/\texttt{delete}，数值字段包括 \texttt{probe\_count}、\texttt{kick\_count}、\texttt{latency\_ns}、\texttt{cubby\_tier}。典型分析包括：全局平均探针 \texttt{SELECT AVG(probe\_count) FROM metrics WHERE snapshot\_id=?}；按 tier 分组平均探针；\texttt{cubby} 表上按 tier 求 \texttt{AVG(size/capacity)}；探针与踢出次数的直方图分布等。附录中列出典型 SQL，本章仅强调其与论文命题的对应关系：平均探针验证元数据与路由是否落在预期量级；kick 分布验证级联驱逐深度；tier 利用率验证饱和度与 tail 策略。
 
-\textbf{预期现象}：随着负载上升，偏好 mini-bin 更容易被填满，插入置换链更频繁，fallback 作为兜底路径的使用比例上升；在较小 \(k\) 或偏斜分布下，fallback 占比上升更明显。
+\section{写入策略}
+高频路径禁止“每插入一行即写库”。实现上采用线程本地缓冲，按条数阈值（例如千条）批量 \texttt{INSERT}，降低锁竞争与刷盘开销；结构快照由手动触发，将当前 \texttt{cubby} 与 \texttt{slot\_snapshot} 导出，保证与某时刻逻辑状态一致。
 
-\section{实验三：踢出深度直方图（kick depth histogram）}
-该实验通过 \texttt{GET /api/experiment/kick\_depth\_hist} 返回插入过程中记录的深度直方图（在 \texttt{/api/init} 时清空）。其中 depth=0 表示直接放入空槽，depth>0 表示发生踢出链；额外桶用于统计“仅落入 fallback”的事件。\par
+\section{前端展示}
+前端读取快照列表与聚合查询结果，绘制平均探针、tier 对比、直方图与尾延迟曲线（可选用 ECharts\cite{echarts} 等组件库）。图表与第 \ref{ch:design} 章中的不变量叙述一并阅读，可判断实现是否偏离理论分布。
 
-\textbf{预期现象}：在合理参数下，踢出深度主要集中在较小深度；增大 \(k\) 会延长允许的置换链，减少落入 fallback 的事件，但可能增加插入代价。
-
-\section{查询测试：分位探针统计}
-通过 \texttt{POST /api/query\_test} 可在给定查询次数与命中率配置下执行大量查询，并返回平均探针、P99 与最大探针。该接口可以用于在固定表状态下观察命中/未命中混合查询的尾部行为。\par
-
-\section{结果讨论与局限}
-由于本章目标是形成可编译的论文初稿，本文在初稿阶段先给出实验设计、指标定义与预期现象，并与系统已实现的实验接口一一对齐。后续可直接运行前端实验面板或调用相应 API，导出真实曲线与数据表格，并将本章的“预期现象”替换为“实测结果与分析”。
-
+\section{本章小结}
+实验设计围绕“可证明性质的可观测代理量”展开：用 \texttt{metrics} 刻画操作微观代价，用 \texttt{tier\_stat} 与 \texttt{cubby} 刻画宏观分布，用手工快照保证可重复对比。具体数值结果随运行环境与数据集变化，本文不绑定某一组绝对数字。

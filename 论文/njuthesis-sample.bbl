@@ -19,122 +19,106 @@
 
 \refsection{0}
   \datalist[entry]{none/global//global/global/global}
-    \entry{pagh2021otsh}{article}{}{}
-      \name{author}{3}{}{%
-        {{hash=88974e5158546cc2704aa597baa5ac09}{%
-           family={Pagh},
-           familyi={P\bibinitperiod},
-           given={Rasmus},
-           giveni={R\bibinitperiod}}}%
-        {{hash=1cc8a7c1cd73e56efcd99c6f098894ca}{%
-           family={Seidel},
-           familyi={S\bibinitperiod},
-           given={Thomas},
-           giveni={T\bibinitperiod}}}%
-        {{hash=bc24aebbfea9fc0a6ce9a09af5db64c6}{%
-           family={Wieder},
-           familyi={W\bibinitperiod},
-           given={Udi},
-           giveni={U\bibinitperiod}}}%
+    \entry{pagh2021otsh}{online}{}{}
+      \name{author}{5}{}{%
+        {{hash=73b35b4e99fa82d2e693c149ec5d1d17}{%
+           family={Bender},
+           familyi={B\bibinitperiod},
+           given={Michael\bibnamedelima A.},
+           giveni={M\bibinitperiod\bibinitdelim A\bibinitperiod}}}%
+        {{hash=9f27630f7ecbd81102be7007c9df29d5}{%
+           family={Farach-Colton},
+           familyi={F\bibinithyphendelim C\bibinitperiod},
+           given={Martín},
+           giveni={M\bibinitperiod}}}%
+        {{hash=6a6cd7088f6bee5921c6094fc0c3e234}{%
+           family={Kuszmaul},
+           familyi={K\bibinitperiod},
+           given={John},
+           giveni={J\bibinitperiod}}}%
+        {{hash=49e21e36aed3fa8c3a0a7b61e39105a3}{%
+           family={Kuszmaul},
+           familyi={K\bibinitperiod},
+           given={William},
+           giveni={W\bibinitperiod}}}%
+        {{hash=c7f9fa1a4db432c1ec8022696278f3b6}{%
+           family={Liu},
+           familyi={L\bibinitperiod},
+           given={Mingmou},
+           giveni={M\bibinitperiod}}}%
       }
-      \name{namea}{3}{}{%
-        {{hash=88974e5158546cc2704aa597baa5ac09}{%
-           family={Pagh},
-           familyi={P\bibinitperiod},
-           given={Rasmus},
-           giveni={R\bibinitperiod}}}%
-        {{hash=1cc8a7c1cd73e56efcd99c6f098894ca}{%
-           family={Seidel},
-           familyi={S\bibinitperiod},
-           given={Thomas},
-           giveni={T\bibinitperiod}}}%
-        {{hash=bc24aebbfea9fc0a6ce9a09af5db64c6}{%
-           family={Wieder},
-           familyi={W\bibinitperiod},
-           given={Udi},
-           giveni={U\bibinitperiod}}}%
+      \name{namea}{5}{}{%
+        {{hash=73b35b4e99fa82d2e693c149ec5d1d17}{%
+           family={Bender},
+           familyi={B\bibinitperiod},
+           given={Michael\bibnamedelima A.},
+           giveni={M\bibinitperiod\bibinitdelim A\bibinitperiod}}}%
+        {{hash=9f27630f7ecbd81102be7007c9df29d5}{%
+           family={Farach-Colton},
+           familyi={F\bibinithyphendelim C\bibinitperiod},
+           given={Martín},
+           giveni={M\bibinitperiod}}}%
+        {{hash=6a6cd7088f6bee5921c6094fc0c3e234}{%
+           family={Kuszmaul},
+           familyi={K\bibinitperiod},
+           given={John},
+           giveni={J\bibinitperiod}}}%
+        {{hash=49e21e36aed3fa8c3a0a7b61e39105a3}{%
+           family={Kuszmaul},
+           familyi={K\bibinitperiod},
+           given={William},
+           giveni={W\bibinitperiod}}}%
+        {{hash=c7f9fa1a4db432c1ec8022696278f3b6}{%
+           family={Liu},
+           familyi={L\bibinitperiod},
+           given={Mingmou},
+           giveni={M\bibinitperiod}}}%
       }
       \list{language}{1}{%
         {english}%
       }
-      \strng{namehash}{32c81af526aaa4583757f7d77c2d6b00}
-      \strng{fullhash}{9283fc3f1ba52af17940db6678524635}
-      \strng{fullhashraw}{9283fc3f1ba52af17940db6678524635}
-      \strng{bibnamehash}{9283fc3f1ba52af17940db6678524635}
-      \strng{authorbibnamehash}{9283fc3f1ba52af17940db6678524635}
-      \strng{authornamehash}{32c81af526aaa4583757f7d77c2d6b00}
-      \strng{authorfullhash}{9283fc3f1ba52af17940db6678524635}
-      \strng{authorfullhashraw}{9283fc3f1ba52af17940db6678524635}
-      \strng{nameabibnamehash}{9283fc3f1ba52af17940db6678524635}
-      \strng{nameanamehash}{32c81af526aaa4583757f7d77c2d6b00}
-      \strng{nameafullhash}{9283fc3f1ba52af17940db6678524635}
-      \strng{nameafullhashraw}{9283fc3f1ba52af17940db6678524635}
+      \strng{namehash}{ea17af64b4155d928fe840fac634dc54}
+      \strng{fullhash}{324d34093aebecc6252089297c7dffe5}
+      \strng{fullhashraw}{324d34093aebecc6252089297c7dffe5}
+      \strng{bibnamehash}{7491e014bc5ea6b0c0f7bbf72e92abde}
+      \strng{authorbibnamehash}{7491e014bc5ea6b0c0f7bbf72e92abde}
+      \strng{authornamehash}{ea17af64b4155d928fe840fac634dc54}
+      \strng{authorfullhash}{324d34093aebecc6252089297c7dffe5}
+      \strng{authorfullhashraw}{324d34093aebecc6252089297c7dffe5}
+      \strng{nameabibnamehash}{7491e014bc5ea6b0c0f7bbf72e92abde}
+      \strng{nameanamehash}{ea17af64b4155d928fe840fac634dc54}
+      \strng{nameafullhash}{324d34093aebecc6252089297c7dffe5}
+      \strng{nameafullhashraw}{324d34093aebecc6252089297c7dffe5}
       \field{sortinit}{1}
       \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
-      \field{journaltitle}{Proceedings of the ACM on Management of Data}
+      \field{day}{4}
+      \field{eprinttype}{arxiv}
       \field{langid}{english}
       \field{languageid}{english}
       \field{lansortorder}{4}
+      \field{month}{11}
       \field{title}{On the Optimal Time/Space Tradeoff for Hash Tables}
-      \field{usera}{J}
+      \field{urlday}{2}
+      \field{urlmonth}{5}
+      \field{urlyear}{2026}
+      \field{usera}{EB}
       \field{userd}{english}
       \field{userf}{english}
       \field{year}{2021}
       \field{dateera}{ce}
-      \keyw{pagh2021otsh}
-    \endentry
-    \entry{mysqlmanual}{online}{}{}
-      \name{author}{1}{}{%
-        {{hash=30162ed78b6c10f731411f2fc440c24f}{%
-           family={{Oracle}},
-           familyi={O\bibinitperiod}}}%
-      }
-      \name{namea}{1}{}{%
-        {{hash=30162ed78b6c10f731411f2fc440c24f}{%
-           family={{Oracle}},
-           familyi={O\bibinitperiod}}}%
-      }
-      \list{language}{1}{%
-        {english}%
-      }
-      \strng{namehash}{30162ed78b6c10f731411f2fc440c24f}
-      \strng{fullhash}{30162ed78b6c10f731411f2fc440c24f}
-      \strng{fullhashraw}{30162ed78b6c10f731411f2fc440c24f}
-      \strng{bibnamehash}{30162ed78b6c10f731411f2fc440c24f}
-      \strng{authorbibnamehash}{30162ed78b6c10f731411f2fc440c24f}
-      \strng{authornamehash}{30162ed78b6c10f731411f2fc440c24f}
-      \strng{authorfullhash}{30162ed78b6c10f731411f2fc440c24f}
-      \strng{authorfullhashraw}{30162ed78b6c10f731411f2fc440c24f}
-      \strng{nameabibnamehash}{30162ed78b6c10f731411f2fc440c24f}
-      \strng{nameanamehash}{30162ed78b6c10f731411f2fc440c24f}
-      \strng{nameafullhash}{30162ed78b6c10f731411f2fc440c24f}
-      \strng{nameafullhashraw}{30162ed78b6c10f731411f2fc440c24f}
-      \field{sortinit}{2}
-      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
-      \field{labelnamesource}{author}
-      \field{labeltitlesource}{title}
-      \field{langid}{english}
-      \field{languageid}{english}
-      \field{lansortorder}{4}
-      \field{title}{MySQL Reference Manual}
-      \field{urlday}{27}
-      \field{urlmonth}{4}
-      \field{urlyear}{2026}
-      \field{usera}{A}
-      \field{userd}{english}
-      \field{userf}{english}
-      \field{year}{2026}
-      \field{dateera}{ce}
       \field{urldateera}{ce}
+      \verb{eprint}
+      \verb 2111.00602
+      \endverb
       \verb{urlraw}
-      \verb https://dev.mysql.com/doc/
+      \verb https://arxiv.org/abs/2111.00602
       \endverb
       \verb{url}
-      \verb https://dev.mysql.com/doc/
+      \verb https://arxiv.org/abs/2111.00602
       \endverb
-      \keyw{mysqlmanual}
+      \keyw{pagh2021otsh}
     \endentry
     \entry{cpphttplib}{online}{}{}
       \name{author}{1}{}{%
@@ -166,8 +150,8 @@
       \strng{nameanamehash}{878a2a65f75e4397559673692060f491}
       \strng{nameafullhash}{878a2a65f75e4397559673692060f491}
       \strng{nameafullhashraw}{878a2a65f75e4397559673692060f491}
-      \field{sortinit}{3}
-      \field{sortinithash}{ad6fe7482ffbd7b9f99c9e8b5dccd3d7}
+      \field{sortinit}{5}
+      \field{sortinithash}{20e9b4b0b173788c5dace24730f47d8c}
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
       \field{langid}{english}
@@ -221,8 +205,8 @@
       \strng{nameanamehash}{040508666b430e19425dd0c986e56caa}
       \strng{nameafullhash}{040508666b430e19425dd0c986e56caa}
       \strng{nameafullhashraw}{040508666b430e19425dd0c986e56caa}
-      \field{sortinit}{4}
-      \field{sortinithash}{9381316451d1b9788675a07e972a12a7}
+      \field{sortinit}{6}
+      \field{sortinithash}{b33bc299efb3c36abec520a4c896a66d}
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
       \field{langid}{english}
@@ -245,6 +229,57 @@
       \verb https://github.com/nlohmann/json
       \endverb
       \keyw{nlohmannjson}
+    \endentry
+    \entry{mysqlmanual}{online}{}{}
+      \name{author}{1}{}{%
+        {{hash=30162ed78b6c10f731411f2fc440c24f}{%
+           family={{Oracle}},
+           familyi={O\bibinitperiod}}}%
+      }
+      \name{namea}{1}{}{%
+        {{hash=30162ed78b6c10f731411f2fc440c24f}{%
+           family={{Oracle}},
+           familyi={O\bibinitperiod}}}%
+      }
+      \list{language}{1}{%
+        {english}%
+      }
+      \strng{namehash}{30162ed78b6c10f731411f2fc440c24f}
+      \strng{fullhash}{30162ed78b6c10f731411f2fc440c24f}
+      \strng{fullhashraw}{30162ed78b6c10f731411f2fc440c24f}
+      \strng{bibnamehash}{30162ed78b6c10f731411f2fc440c24f}
+      \strng{authorbibnamehash}{30162ed78b6c10f731411f2fc440c24f}
+      \strng{authornamehash}{30162ed78b6c10f731411f2fc440c24f}
+      \strng{authorfullhash}{30162ed78b6c10f731411f2fc440c24f}
+      \strng{authorfullhashraw}{30162ed78b6c10f731411f2fc440c24f}
+      \strng{nameabibnamehash}{30162ed78b6c10f731411f2fc440c24f}
+      \strng{nameanamehash}{30162ed78b6c10f731411f2fc440c24f}
+      \strng{nameafullhash}{30162ed78b6c10f731411f2fc440c24f}
+      \strng{nameafullhashraw}{30162ed78b6c10f731411f2fc440c24f}
+      \field{sortinit}{7}
+      \field{sortinithash}{108d0be1b1bee9773a1173443802c0a3}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{langid}{english}
+      \field{languageid}{english}
+      \field{lansortorder}{4}
+      \field{title}{MySQL Reference Manual}
+      \field{urlday}{27}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{usera}{A}
+      \field{userd}{english}
+      \field{userf}{english}
+      \field{year}{2026}
+      \field{dateera}{ce}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://dev.mysql.com/doc/
+      \endverb
+      \verb{url}
+      \verb https://dev.mysql.com/doc/
+      \endverb
+      \keyw{mysqlmanual}
     \endentry
     \entry{vue3}{online}{}{}
       \name{author}{1}{}{%
@@ -272,8 +307,8 @@
       \strng{nameanamehash}{8a55232bebff9c7167f4e450b206da18}
       \strng{nameafullhash}{8a55232bebff9c7167f4e450b206da18}
       \strng{nameafullhashraw}{8a55232bebff9c7167f4e450b206da18}
-      \field{sortinit}{5}
-      \field{sortinithash}{20e9b4b0b173788c5dace24730f47d8c}
+      \field{sortinit}{8}
+      \field{sortinithash}{a231b008ebf0ecbe0b4d96dcc159445f}
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
       \field{langid}{english}
@@ -296,6 +331,57 @@
       \verb https://vuejs.org/
       \endverb
       \keyw{vue3}
+    \endentry
+    \entry{echarts}{online}{}{}
+      \name{author}{1}{}{%
+        {{hash=8b499b5be8914246b406785e1327dbb3}{%
+           family={{Apache Software Foundation}},
+           familyi={A\bibinitperiod}}}%
+      }
+      \name{namea}{1}{}{%
+        {{hash=8b499b5be8914246b406785e1327dbb3}{%
+           family={{Apache Software Foundation}},
+           familyi={A\bibinitperiod}}}%
+      }
+      \list{language}{1}{%
+        {english}%
+      }
+      \strng{namehash}{8b499b5be8914246b406785e1327dbb3}
+      \strng{fullhash}{8b499b5be8914246b406785e1327dbb3}
+      \strng{fullhashraw}{8b499b5be8914246b406785e1327dbb3}
+      \strng{bibnamehash}{8b499b5be8914246b406785e1327dbb3}
+      \strng{authorbibnamehash}{8b499b5be8914246b406785e1327dbb3}
+      \strng{authornamehash}{8b499b5be8914246b406785e1327dbb3}
+      \strng{authorfullhash}{8b499b5be8914246b406785e1327dbb3}
+      \strng{authorfullhashraw}{8b499b5be8914246b406785e1327dbb3}
+      \strng{nameabibnamehash}{8b499b5be8914246b406785e1327dbb3}
+      \strng{nameanamehash}{8b499b5be8914246b406785e1327dbb3}
+      \strng{nameafullhash}{8b499b5be8914246b406785e1327dbb3}
+      \strng{nameafullhashraw}{8b499b5be8914246b406785e1327dbb3}
+      \field{sortinit}{9}
+      \field{sortinithash}{0a5ebc79d83c96b6579069544c73c7d4}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{langid}{english}
+      \field{languageid}{english}
+      \field{lansortorder}{4}
+      \field{title}{Apache ECharts Documentation}
+      \field{urlday}{27}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{usera}{EB}
+      \field{userd}{english}
+      \field{userf}{english}
+      \field{year}{2026}
+      \field{dateera}{ce}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://echarts.apache.org/
+      \endverb
+      \verb{url}
+      \verb https://echarts.apache.org/
+      \endverb
+      \keyw{echarts}
     \endentry
   \enddatalist
 \endrefsection

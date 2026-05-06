@@ -1,49 +1,60 @@
-\chapter{系统总体设计}
+\chapter{紧凑构件与系统总体设计}
+\label{ch:design}
 
-\section{总体结构}
-哈希表在逻辑上视为一维槽位数组 \(\mathrm{SLOT}[0\ldots \mathrm{capacity}-1]\)。为控制查询代价并保持空间利用率，本文采用分层组织结构：全局按 bin 划分，再在每个 bin 内划分为若干 mini-bin，并在 bin 尾部设置常数大小的 fallback 区域。整体结构如图~\ref{fig:layout_overview} 所示（本文以逻辑示意为主，具体槽位落库见第 \ref{sec:db_mapping} 节）。\par
+\section{设计目标与复杂度轮廓}
+本系统实现开放寻址型动态哈希表的一层工程化外壳，其算法目标与文献一致：查询时间为确定性 \(O(1)\)（在路由器与元数据访问为常数时间的理想模型下）；插入与删除为 \(O(k)\) 次交换（高概率意义由原文保证）；总空间为 \(n w + O(n\log^{(k)} n)\) 比特量级，其中 \(w\) 为值宽相关项，第二项来自路由与插入元数据\cite{pagh2021otsh}。工程实现中，常数因子与 I/O、锁竞争、批量落库策略会叠加在实际延迟之上。
 
-\begin{figure}[htbp]
-  \centering
-  \fbox{\parbox{0.92\linewidth}{
-    \vspace{0.6em}
-    \textbf{Bin} = \textbf{MiniBin0}\; \textbf{MiniBin1}\; \(\cdots\)\; \textbf{MiniBin(M-1)} \qquad \textbf{Fallback}
-    \vspace{0.6em}
-  }}
-  \caption{bin / mini-bin / fallback 的逻辑布局示意}
-  \label{fig:layout_overview}
-\end{figure}
+\section{紧凑元数据与局域查询路由}
+\label{sec:compact-router}
+当 bin 与 cubby 尺度为 \(\mathrm{polylog}\,n\) 时，需在总空间接近信息论线性的前提下存储\textbf{变长}元数据并支持常数时间读写；同时需在设施内把键映射到“目标 cubby 与槽位”。以下两个构件构成文献构造中的“中间层”，负责在 \(\mathrm{polylog}\,n\) 尺度内紧凑表示与常数时间访问。
 
-\section{参数与派生规则}
-\label{sec:params}
-系统对外暴露的核心参数包括：目标规模 \(n\)、置换深度上界 \(k\)、负载阈值 \(\mathrm{load\_factor}\) 以及三枚哈希种子。其余尺寸由参数派生得到：
+\subsection{MiniArray：变长条目的紧凑动态数组}
+每个 cubby 内需维护长度约为 \(\mathrm{polylog}\,n\) 的条目数组，但每条元数据的比特长度不同且随更新变化。MiniArray 将数组视为字对齐的 packed B-树：叶存实际条目比特，内部节点存子块偏移与枢轴（索引范围）；因总条目数为 \(\mathrm{polylog}\,n\)，指针与枢轴可用 \(\Theta(\log\log n)\) 比特打包进单字，树高 \(O(1)\)。分裂、合并与单点更新均摊常数时间；节点上的位运算可通过预建查找表在 \(O(1)\) 内完成（四俄式思想）。由此，总空间与所有条目总比特数成线性关系，且支持工程上要求的“每槽读写”接口。
+
+\subsection{Local Query Router：少量键到槽索引的映射}
+在设施的 \(D\) 数组及 cubby 内部，需对规模至多为 \(O(\log n/\log\log n)\) 的键集合回答“键 \(x\) 落在何处”。实现上对键哈希为足够长的随机二进制串，构建压缩前缀二进制 Trie：仅在能区分彼此的最短唯一前缀处停止，叶部存储 cubby 标识与槽索引等变长元数据；整棵 Trie 按深度优先遍历编码为紧凑比特流。查询时沿查询键的哈希串在编码流上行走，配合按半字（或半字宽）查表实现期望常数时间的跳转；插入与删除则更新 Trie 与编码流。对给定元素个数，编码期望长度为 \(O(\log n)\) 比特量级（高概率不超过同阶上界）。
+
+\section{三层架构：从 Cubby 到 Facility}
+第 \ref{ch:bg} 章已给出 k-kick 树上界；第 \ref{sec:compact-router} 节已给出两类紧凑构件。本节给出完整表的逻辑分层，与实现中的模块边界一致。
+
+\subsection{Cubby（微观层）}
+每个 Cubby 是规模约为 \(\mathrm{polylog}\,N\) 的独立 k-kick 实例，包含：
 \begin{itemize}
-  \item \textbf{mini-bin 尺寸与数量}：根据设计目标，\(\mathrm{mini\_bin\_size}\) 与 \(\mathrm{num\_mini\_bins}\) 与 \(\log^{(k)} n\) 同阶。工程实现中通过“迭代对数”函数计算基值，并对结果进行 clamp（例如限制在 4 到 64）以避免过小导致结构退化或过大导致区间扫描代价上升。
-  \item \textbf{fallback 大小}：为常数，本文实现固定为 8。
-  \item \textbf{bin 大小}：\(\mathrm{bin\_size}=\mathrm{mini\_bin\_size}\times \mathrm{num\_mini\_bins} + \mathrm{fallback\_size}\)。
-  \item \textbf{总 bin 数与容量}：\(\mathrm{total\_bins}=\left\lceil \frac{n}{\mathrm{bin\_size}}\right\rceil\)，\(\mathrm{capacity\_slots}=\mathrm{total\_bins}\times \mathrm{bin\_size}\)。在线扩容将 \(\mathrm{total\_bins}\) 翻倍并更新元数据。
+  \item 载荷数组 \(S\)：长度 \(|I|\)，存放键值载荷或商压缩后的后缀；
+  \item MiniArray \texttt{Meta}：每槽一条变长 \texttt{MetaEntry}，聚合查询路由辅助、插入控制（深度、bin 饱和相关）与商压缩修复信息；
+  \item \texttt{FreeSlotTree}：浅层位图树，\(O(1)\) 深度查找空闲槽。
 \end{itemize}
+tier 与容量由全局 \(N,K\) 及迭代对数导出：容量近似为 \(K/(\log^{(\mathrm{tier}+1)} N)^2\) 形式，用于控制单层 cubby 规模。
 
-\section{映射关系与连续区间}
-\label{sec:mapping}
-对任意键 \(x\)，使用两路哈希分别确定其所属 bin 与偏好 mini-bin：
+\subsection{Facility 与路由层}
+全表划分为约 \(N/K\) 个设施（Facility），每个设施聚合约 \(K=\mathrm{polylog}\,N\) 个键的路由与 cubby 集合。设施内维护：
+\begin{itemize}
+  \item \texttt{D}：长度为 \(K\) 的 MiniArray，每项为一个 Local Query Router；对键 \(x\)，由 \(\pi(x)\) 的低 \(\log K\) 位索引到 \texttt{D[b]}，得到目标 cubby 与槽位；
+  \item 多 tier 的 cubby 列表及 \textbf{tail}：除唯一 tail 外，其余 cubby 均保持满；插入一律进入 tail，删除非 tail 槽时从 tail 随机搬迁一枚元素填补，以维持饱和度不变量。
+\end{itemize}
+设施索引由 \(\pi(x)\) 的更高位段与全局 \(N,K\) 共同决定（商压缩模式下 \(g^\ast(x)=\pi(x)\bmod N\) 时，低 \(\log N\) 位拆分出设施与桶索引）。
+
+\subsection{全局状态与动态容量}
+全局维护当前键数 \(n\)、容量上界 \(N\)（取 \(2\) 的幂）、\(K\) 及设施指针数组；\texttt{ResizeManager} 负责在 \(n>N\) 或 \(n<N/4\) 时触发倍增/减半迁移；\texttt{RebuildScheduler} 与 \texttt{maintainInvariants} 在设施内根据 tier 计数偏离触发创建/销毁重建。
+
+\section{分布不变量与重建}
+设 \(n\) 为当前规模，第 \(j\) 级 tier 的 cubby 目标数量近似为
 \[
-  b = h_{\mathrm{bin}}(x) \bmod \mathrm{total\_bins}, \quad
-  m = h_{\mathrm{pref}}(x) \bmod \mathrm{num\_mini\_bins}.
+  t_j \approx \frac{\bigl(\log^{(j)} n\bigr)^2}{\bigl(\log^{(j+1)} n\bigr)^2},
 \]
-在单个 bin 内，以全局连续下标 \(\mathrm{idx}\) 表示槽位位置。记该 bin 的起始偏移 \(\mathrm{offset}=b\times \mathrm{bin\_size}\)，则：
-\begin{itemize}
-  \item 偏好 mini-bin 的区间为 \([\mathrm{offset}+m\cdot \mathrm{mini\_bin\_size},\; \mathrm{offset}+(m+1)\cdot \mathrm{mini\_bin\_size}-1]\)；
-  \item fallback 区间为 \([\mathrm{offset}+\mathrm{mini\_bin\_size}\cdot \mathrm{num\_mini\_bins},\; \mathrm{offset}+\mathrm{bin\_size}-1]\)。
-\end{itemize}
-因此一次查询只需访问上述两个连续区间即可完成验证，探测次数可按“区间扫描次数”统计（详见第 \ref{sec:alg_find} 节）。
+第 \(j\) 级 cubby 容量尺度约为 \(r_j \approx K/(\log^{(j)} n)^2\)（与上文 \(t_j\) 配套使用）。当某 tier 计数小于 \(t_j/2\) 或大于 \(3t_j\) 时触发后台重建：过少则将一个 \(j{+}1\) 级 cubby 拆为约 \(t_j\) 个 \(j\) 级 cubby；过多则将约 \(t_j\) 个 \(j\) 级 cubby 合并为一个 \(j{+}1\) 级 cubby。单次重建代价 \(O(|I|)\)，触发间隔 \(\Theta(|I|)\) 次操作，故均摊附加时间为 \(O(1)\)。
 
-\section{指纹与空槽约定}
-每个键 \(x\) 计算 16 位指纹 \(\mathrm{fp}(x)\)，用于快速过滤；系统约定 \(\mathrm{fp}=0\) 表示空槽，因此当计算得到 0 时将其映射为 1。槽位是否为空可由 \(\mathrm{fp}=0\)（且 key 为 NULL）判断。
+\section{插入、查询与删除主路径}
+以下均先应用可逆随机置换 \(\pi\)（工程上可用 Feistel 型 32--32 轮函数实现），记 \(y=\pi(x)\)。
 
-\section{数据库映射与元数据}
-\label{sec:db_mapping}
-本文将逻辑槽位数组映射为数据库表 \texttt{hash\_table} 的行，使用 \texttt{idx} 作为主键，存储 \texttt{key} 与 \texttt{fp}。为保证键唯一性，在 \texttt{key} 上建立唯一约束。元数据表 \texttt{ht\_meta} 存储 \(n,k,\mathrm{load\_factor}\) 与种子，并持久化 \(\mathrm{total\_bins}\) 以支持在线扩容后的规模维持。\par
+\textbf{插入。} 由 \(y\) 的低 \(\log N\) 位划分设施 \(r\) 与路由桶 \(b\)；在 \texttt{D[b]} 中确认不存在后，将键插入设施 \(r\) 的 tail：在 tail 内执行 k-kick 插入得槽位 \texttt{slot}，写 \(S[\texttt{slot}]\) 与 \texttt{Meta}，更新空闲树，再在路由器中登记指纹到 \((\text{tail},\texttt{slot})\)。若 tail 变满则新建 tail；\(n\) 递增，必要时扩容。
 
-在线扩容采用双表迁移：创建 \texttt{hash\_table\_next} 并按 bin 分步迁移，迁移完成后用 \texttt{RENAME TABLE} 原子换表，最后将新的规模写回元数据（详见第 \ref{sec:resize} 节）。
+\textbf{查询。} 同样计算 \((r,b)\)，经 \texttt{D[b]} 得到 \((I,i)\)，读出 \(S[i]\) 与 \texttt{Meta}，用商压缩字段与设施编号重建 \(g^\ast\) 与完整 \(\pi(x)\)，再 \(\pi^{-1}\) 校验并返回值。
 
+\textbf{删除。} 定位后清空槽与路由器；若 \(I\) 非 tail，则从 tail 随机取一枚迁入空槽；若 tail 空则回收并另选一满 1-tier cubby 提升为 tail；\(n\) 递减，必要时缩容。
+
+\section{商压缩与键重建}
+令 \(g^\ast(x)=\pi(x)\bmod N\)，则顶 \(\log N\) 位可由路由过程隐式携带。Cubby 内 \(S\) 不重复存这 \(\log N\) 位，而在 \texttt{Meta} 中记录例如 \(\delta=g_I(x)-i\)（偏好槽与实际槽之差）及 \texttt{mid\_bits}（衔接 \(g_I\) 与 \(g^\ast\) 低段所需的中间位）。查询时由 \(r\)、\(g_I\) 与 \texttt{mid\_bits} 拼出 \(g^\ast\)，与 \(S\) 中高位载荷合并得 \(\pi(x)\)，再逆置换得原键。
+
+\section{模块依赖关系}
+逻辑依赖可概括为：\(\text{HashTable}\to\text{Facilities}\to(\texttt{D},\text{Cubbies},\text{tail})\)，Cubby 内部依赖 \((S,\texttt{Meta},\texttt{FreeSlotTree})\) 与 k-kick 插入；全局依赖 \texttt{ResizeManager} 与重建调度。该划分与实现代码中的头文件/源文件边界相对应。

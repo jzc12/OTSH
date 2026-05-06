@@ -26,11 +26,11 @@
     % 作者英文姓名
     % 一般使用拼音
     %
-    keywords = {哈希表,时间空间折中,数据库存储,指纹,动态扩容},
+    keywords = {哈希表,k-kick 树,商压缩,多 tier 重建,MySQL 指标},
     % 中文关键词列表
     % 使用英文半角逗号(,)分隔
     %
-    keywords* = {Hash table,Time-space tradeoff,Database-backed storage,Fingerprint,Dynamic Scaling},
+    keywords* = {Hash table,k-kick tree,Quotienting,Multi-tier rebuild,MySQL metrics},
     % 英文关键词
     % 使用英文半角逗号(,)分隔
     %

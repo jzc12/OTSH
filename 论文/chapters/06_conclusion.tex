@@ -2,7 +2,7 @@
 \label{ch:concl}
 
 \section{工作总结}
-本文对 OTSH 型最优时间/空间折中哈希表进行了自洽的论文化整理：第 \ref{ch:bg} 章从球与槽模型与探针复杂度出发，说明 k-kick 树如何通过分层 bin、随机优先级与级联驱逐在 \(O(k)\) 次交换内实现文献意义下的折中目标；第 \ref{ch:design} 章将 MiniArray 与 Local Query Router 作为独立中间层叙述后，再给出 Cubby、Facility、全局置换与商压缩下的插入/查询/删除主路径及分布不变量。实现层面概述了 C++/HTTP、MySQL 快照与指标、Vue 前端及批量写入策略，使结构行为可被记录与可视化。
+本文对 OTSH 型最优时间/空间折中哈希表进行了自洽的论文化整理：第 \ref{ch:bg} 章从球与槽模型与探针复杂度出发，说明 k-kick 树如何通过分层 bin、随机优先级与级联驱逐在 \(O(k)\) 次交换内实现文献意义下的折中目标；第 \ref{ch:design} 章将 MiniArray 与 Local Query Router 作为独立中间层叙述后，再给出 Cubby、Facility、全局置换与商压缩下的插入/查询/删除主路径及分布不变量。实现层面概述了 C++20/HTTP、MySQL 键表与 \texttt{otsh\_op\_metrics}、自动 DDL、\texttt{otsh\_perf}/\texttt{otsh\_tests} 及指标批量写入策略，使结构行为可被记录并与外部可视化解耦。
 
 \section{局限与后续工作}
 \begin{itemize}

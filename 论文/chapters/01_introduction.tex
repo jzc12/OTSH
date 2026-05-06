@@ -6,17 +6,17 @@
 Bender 等在 arXiv:2111.00602（后文记为 OTSH 文献）中给出了哈希表时间—空间折中的完整曲线：对任意 \(k\in[\log^\ast n]\)，可同时实现 \(O(k)\) 时间的插入/删除、\(O(1)\) 时间的查询，以及 \(O(\log^{(k)} n)\) 量级的每键浪费比特（均高概率于 \(n\)）\cite{pagh2021otsh}。构造通过分层 bin、随机优先级与级联驱逐（k-kick 树）组织槽位占用，并配合紧凑元数据编码与商压缩，使总空间接近信息论意义下的最优量级。将上述理论构件落实为可运行、可观测、可实验的工程系统，对理解其实际行为与验证分布性质具有明确价值。
 
 \section{本文目标与范围}
-本文围绕 OTSH 文献中的理论目标，系统阐述从“探针复杂度—交换成本”模型到完整哈希表的三层架构：微观层（Cubby 内的 k-kick 树与元数据）、路由层（设施内的 MiniArray \(D\) 与 Local Query Router）、宏观层（多 tier 小隔间、tail 不变量、后台重建与扩容缩容）。在此基础上，说明本课题实现的工程形态：以 C++ 提供 HTTP 服务、以 MySQL 持久化快照与指标、以 Vue 前端做可视化实验，并给出数据库表设计与批量写入策略。
+本文围绕 OTSH 文献中的理论目标，系统阐述从“探针复杂度—交换成本”模型到完整哈希表的三层架构：微观层（Cubby 内的 k-kick 树与元数据）、路由层（设施内的 MiniArray \(D\) 与 Local Query Router）、宏观层（多 tier 小隔间、tail 不变量、后台重建与扩容缩容）。在此基础上，说明本课题\textbf{当前仓库}的工程形态：以 C++20 单进程 HTTP 服务（\texttt{cpp-httplib}）暴露实验接口；以 MySQL 持久化键集与 \texttt{otsh\_op\_metrics} 等指标表，并在服务端自动建表；另提供无 MySQL 依赖的 \texttt{otsh\_perf} 与 \texttt{otsh\_tests} 便于本地验收。可视化可由任意 HTTP 客户端或自研前端完成，本文不绑定具体 UI 框架。
 
 本文不重新证明原文定理，而侧重结构分解、不变量、操作流程与实现映射，使读者能够依据本文复现或扩展同一类系统。
 
 \section{主要贡献}
 \begin{itemize}
   \item 将球与槽模型、k-kick 树分层结构、级联驱逐与 \(O(k)\) 交换上界整理为第 \ref{ch:bg} 章，并与 arXiv:2111.00602 的折中曲线表述对齐；
-  \item 将 MiniArray、Local Query Router 独立为第 \ref{ch:design} 章的前置节，再给出 Cubby、Facility、全局状态与 ResizeManager 的职责划分及插入/查询/删除主路径；
+  \item 将 MiniArray、Local Query Router 独立为第 \ref{ch:design} 章的前置节，再给出 Cubby、Facility、全局状态与双表迁移/重建调度的职责划分及插入/查询/删除主路径；
   \item 阐述分布不变量 \(t_j\)、创建/销毁重建及其均摊意义，以及商压缩下键的重建思路；
-  \item 归纳面向实验验证的 MySQL 关系模式（快照、cubby、tier 统计、metrics）与线程本地缓冲批量落库策略。
+  \item 归纳面向实验验证的 MySQL 关系模式（快照、cubby、tier 统计、\texttt{otsh\_op\_metrics}）与内存缓冲批量落库策略。
 \end{itemize}
 
 \section{论文结构}
-全文依“底层驱逐上界—中间层紧凑编码—顶层组装”展开：第 \ref{ch:bg} 章从球与槽模型出发，形式化探针与交换成本，并归纳 k-kick 树分层驱逐与文献给出的折中上界；第 \ref{ch:design} 章先给出 MiniArray 与 Local Query Router 两类紧凑构件，再给出 Cubby、Facility 与全局扩容/重建流程及商压缩键重建；第 \ref{ch:impl} 章对应 C++/HTTP 实现与代码映射；第 \ref{ch:exp} 章给出 MySQL 快照与 \texttt{metrics} 观测设计及典型分析查询；第 \ref{ch:concl} 章总结并讨论局限与展望。附录给出 HTTP 接口与关系模式等补充材料。
+全文依“底层驱逐上界—中间层紧凑编码—顶层组装”展开：第 \ref{ch:bg} 章从球与槽模型出发，形式化探针与交换成本，并归纳 k-kick 树分层驱逐与文献给出的折中上界；第 \ref{ch:design} 章先给出 MiniArray 与 Local Query Router 两类紧凑构件，再给出 Cubby、Facility 与全局扩容/重建流程及商压缩键重建；第 \ref{ch:impl} 章对应 C++/HTTP 实现与代码映射；第 \ref{ch:exp} 章给出 MySQL 快照与 \texttt{otsh\_op\_metrics} 观测设计及典型分析查询；第 \ref{ch:concl} 章总结并讨论局限与展望。附录给出 HTTP 接口与关系模式等补充材料。

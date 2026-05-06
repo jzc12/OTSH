@@ -230,108 +230,6 @@
       \endverb
       \keyw{nlohmannjson}
     \endentry
-    \entry{mysqlmanual}{online}{}{}
-      \name{author}{1}{}{%
-        {{hash=30162ed78b6c10f731411f2fc440c24f}{%
-           family={{Oracle}},
-           familyi={O\bibinitperiod}}}%
-      }
-      \name{namea}{1}{}{%
-        {{hash=30162ed78b6c10f731411f2fc440c24f}{%
-           family={{Oracle}},
-           familyi={O\bibinitperiod}}}%
-      }
-      \list{language}{1}{%
-        {english}%
-      }
-      \strng{namehash}{30162ed78b6c10f731411f2fc440c24f}
-      \strng{fullhash}{30162ed78b6c10f731411f2fc440c24f}
-      \strng{fullhashraw}{30162ed78b6c10f731411f2fc440c24f}
-      \strng{bibnamehash}{30162ed78b6c10f731411f2fc440c24f}
-      \strng{authorbibnamehash}{30162ed78b6c10f731411f2fc440c24f}
-      \strng{authornamehash}{30162ed78b6c10f731411f2fc440c24f}
-      \strng{authorfullhash}{30162ed78b6c10f731411f2fc440c24f}
-      \strng{authorfullhashraw}{30162ed78b6c10f731411f2fc440c24f}
-      \strng{nameabibnamehash}{30162ed78b6c10f731411f2fc440c24f}
-      \strng{nameanamehash}{30162ed78b6c10f731411f2fc440c24f}
-      \strng{nameafullhash}{30162ed78b6c10f731411f2fc440c24f}
-      \strng{nameafullhashraw}{30162ed78b6c10f731411f2fc440c24f}
-      \field{sortinit}{7}
-      \field{sortinithash}{108d0be1b1bee9773a1173443802c0a3}
-      \field{labelnamesource}{author}
-      \field{labeltitlesource}{title}
-      \field{langid}{english}
-      \field{languageid}{english}
-      \field{lansortorder}{4}
-      \field{title}{MySQL Reference Manual}
-      \field{urlday}{27}
-      \field{urlmonth}{4}
-      \field{urlyear}{2026}
-      \field{usera}{A}
-      \field{userd}{english}
-      \field{userf}{english}
-      \field{year}{2026}
-      \field{dateera}{ce}
-      \field{urldateera}{ce}
-      \verb{urlraw}
-      \verb https://dev.mysql.com/doc/
-      \endverb
-      \verb{url}
-      \verb https://dev.mysql.com/doc/
-      \endverb
-      \keyw{mysqlmanual}
-    \endentry
-    \entry{vue3}{online}{}{}
-      \name{author}{1}{}{%
-        {{hash=8a55232bebff9c7167f4e450b206da18}{%
-           family={{Vue.js Contributors}},
-           familyi={V\bibinitperiod}}}%
-      }
-      \name{namea}{1}{}{%
-        {{hash=8a55232bebff9c7167f4e450b206da18}{%
-           family={{Vue.js Contributors}},
-           familyi={V\bibinitperiod}}}%
-      }
-      \list{language}{1}{%
-        {english}%
-      }
-      \strng{namehash}{8a55232bebff9c7167f4e450b206da18}
-      \strng{fullhash}{8a55232bebff9c7167f4e450b206da18}
-      \strng{fullhashraw}{8a55232bebff9c7167f4e450b206da18}
-      \strng{bibnamehash}{8a55232bebff9c7167f4e450b206da18}
-      \strng{authorbibnamehash}{8a55232bebff9c7167f4e450b206da18}
-      \strng{authornamehash}{8a55232bebff9c7167f4e450b206da18}
-      \strng{authorfullhash}{8a55232bebff9c7167f4e450b206da18}
-      \strng{authorfullhashraw}{8a55232bebff9c7167f4e450b206da18}
-      \strng{nameabibnamehash}{8a55232bebff9c7167f4e450b206da18}
-      \strng{nameanamehash}{8a55232bebff9c7167f4e450b206da18}
-      \strng{nameafullhash}{8a55232bebff9c7167f4e450b206da18}
-      \strng{nameafullhashraw}{8a55232bebff9c7167f4e450b206da18}
-      \field{sortinit}{8}
-      \field{sortinithash}{a231b008ebf0ecbe0b4d96dcc159445f}
-      \field{labelnamesource}{author}
-      \field{labeltitlesource}{title}
-      \field{langid}{english}
-      \field{languageid}{english}
-      \field{lansortorder}{4}
-      \field{title}{Vue.js Documentation}
-      \field{urlday}{27}
-      \field{urlmonth}{4}
-      \field{urlyear}{2026}
-      \field{usera}{EB}
-      \field{userd}{english}
-      \field{userf}{english}
-      \field{year}{2026}
-      \field{dateera}{ce}
-      \field{urldateera}{ce}
-      \verb{urlraw}
-      \verb https://vuejs.org/
-      \endverb
-      \verb{url}
-      \verb https://vuejs.org/
-      \endverb
-      \keyw{vue3}
-    \endentry
     \entry{echarts}{online}{}{}
       \name{author}{1}{}{%
         {{hash=8b499b5be8914246b406785e1327dbb3}{%
@@ -358,8 +256,8 @@
       \strng{nameanamehash}{8b499b5be8914246b406785e1327dbb3}
       \strng{nameafullhash}{8b499b5be8914246b406785e1327dbb3}
       \strng{nameafullhashraw}{8b499b5be8914246b406785e1327dbb3}
-      \field{sortinit}{9}
-      \field{sortinithash}{0a5ebc79d83c96b6579069544c73c7d4}
+      \field{sortinit}{7}
+      \field{sortinithash}{108d0be1b1bee9773a1173443802c0a3}
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
       \field{langid}{english}

@@ -39,7 +39,7 @@ set(_otsh_httplib_ready FALSE)
 if(EXISTS "${OTSH_HTTPPLIB_H}")
   set(_otsh_httplib_ready TRUE)
 else()
-  message(STATUS "Fetching httplib.h (single-file) 鈥?)
+  message(STATUS "Fetching httplib.h (single-file)")
   _otsh_try_download_single(
     "https://raw.githubusercontent.com/yhirose/cpp-httplib/v0.43.1/httplib.h"
     "${OTSH_HTTPPLIB_H}")
@@ -55,7 +55,7 @@ if(_otsh_httplib_ready)
   set(OTSH_HTTPPLIB_INCLUDE "${OTSH_THIRD_PARTY}/cpp-httplib")
   message(STATUS "Using httplib from ${OTSH_HTTPPLIB_INCLUDE}")
 else()
-  message(STATUS "Using FetchContent (zip) for httplib 鈥?)
+  message(STATUS "Using FetchContent (zip) for httplib")
   FetchContent_Declare(
     httplib
     URL https://github.com/yhirose/cpp-httplib/archive/refs/tags/v0.43.1.zip
@@ -69,7 +69,7 @@ set(_otsh_json_ready FALSE)
 if(EXISTS "${OTSH_JSON_HPP}")
   set(_otsh_json_ready TRUE)
 else()
-  message(STATUS "Fetching nlohmann/json.hpp (single-file) 鈥?)
+  message(STATUS "Fetching nlohmann/json.hpp (single-file)")
   _otsh_try_download_single(
     "https://raw.githubusercontent.com/nlohmann/json/v3.11.3/single_include/nlohmann/json.hpp"
     "${OTSH_JSON_HPP}")
@@ -84,7 +84,7 @@ if(_otsh_json_ready)
   add_library(nlohmann_json::nlohmann_json ALIAS otsh_nlohmann_json)
   message(STATUS "Using nlohmann/json from ${OTSH_THIRD_PARTY}")
 else()
-  message(STATUS "Using FetchContent (zip) for nlohmann_json 鈥?)
+  message(STATUS "Using FetchContent (zip) for nlohmann_json")
   FetchContent_Declare(
     nlohmann_json
     URL https://github.com/nlohmann/json/archive/refs/tags/v3.11.3.zip

@@ -2,25 +2,31 @@
 \label{ch:exp}
 
 \section{实验目的}
-在理论结构固定而工程参数可调的前提下，实验关注三类可观测量：（1）探针与踢出次数沿操作类型的分布；（2）各 tier cubby 的负载因子与 cubby 数量是否贴近第 \ref{ch:design} 章给出的 \(t_j\) 目标；（3）tail 行为与延迟尾部是否与理论假设一致。数据库模式为上述统计提供统一落点，便于前端复现图表。
+在理论结构固定而工程参数可调的前提下，实验关注三类可观测量：（1）探针与踢出次数沿操作类型的分布；（2）各 tier cubby 的负载因子与 cubby 数量是否贴近第 \ref{ch:design} 章给出的 \(t_j\) 目标；（3）tail 行为与延迟尾部是否与理论假设一致。数据库侧以 \texttt{otsh\_op\_metrics} 为核心事实表，快照维表记录某次 \texttt{snapshot\_id} 下的结构导出结果，便于脚本或外部可视化工具复现图表。
 
 \section{快照与维度表}
-\texttt{snapshot\_meta} 标记一次实验或一次手工快照（\texttt{snapshot\_tag}、\(n,N,K\) 与时间戳），使多次运行可对比。\texttt{facility} 记录设施 id、所属快照与 \texttt{tail\_cubby\_id}。\texttt{cubby} 记录 \texttt{tier}、\texttt{capacity}、\texttt{size}、\texttt{is\_tail} 等，用于展示 tier 分布与利用率。
+\texttt{snapshot\_meta} 标记一次 \texttt{/api/init} 或手工标记的快照：字段 \texttt{init\_param\_n}、\texttt{table\_n}、\texttt{table\_k} 分别对应初始化请求规模与当时内存表 \(N,K\)（命名规避 Windows 下大小写不敏感导致的列名冲突）。\texttt{facility} 记录设施 id、所属快照与 \texttt{tail\_cubby\_id}。\texttt{cubby} 记录 \texttt{tier}、\texttt{capacity}、\texttt{size}、\texttt{is\_tail} 等，用于展示 tier 分布与利用率。
 
 \section{槽位与 tier 聚合}
-\texttt{slot\_snapshot} 按快照存储 \texttt{cubby\_id}、\texttt{slot\_index}、是否占用、可选 \texttt{key\_hash}（如 \(\pi(x)\)）及 \texttt{probe\_length}。该表刻意不存比特级 \texttt{Meta} 与路由器编码，以降低快照体积并聚焦“最终落槽与探针深度”结果。\texttt{tier\_stat} 按 \((\texttt{snapshot\_id},\texttt{facility\_id},\texttt{tier})\) 聚合 \texttt{cubby\_count}，用于对照
+\texttt{slot\_snapshot} 按快照存储 \texttt{cubby\_id}、\texttt{slot\_index}、是否占用、可选 \texttt{key\_hash}（实现中取 \(\pi(x)\)）及 \texttt{probe\_length}。该表刻意不存比特级 \texttt{Meta} 与路由器编码，以降低快照体积并聚焦“最终落槽”结果。\texttt{tier\_stat} 按 \((\texttt{snapshot\_id},\texttt{facility\_id},\texttt{tier})\) 聚合 \texttt{cubby\_count}，用于对照
 \[
   t_j \approx \frac{\bigl(\log^{(j)} n\bigr)^2}{\bigl(\log^{(j+1)} n\bigr)^2}.
 \]
 
 \section{指标表与典型 SQL}
-\texttt{metrics} 为核心事实表：\texttt{operation\_type} 取 \texttt{insert}/\texttt{query}/\texttt{delete}，数值字段包括 \texttt{probe\_count}、\texttt{kick\_count}、\texttt{latency\_ns}、\texttt{cubby\_tier}。典型分析包括：全局平均探针 \texttt{SELECT AVG(probe\_count) FROM metrics WHERE snapshot\_id=?}；按 tier 分组平均探针；\texttt{cubby} 表上按 tier 求 \texttt{AVG(size/capacity)}；探针与踢出次数的直方图分布等。附录中列出典型 SQL，本章仅强调其与论文命题的对应关系：平均探针验证元数据与路由是否落在预期量级；kick 分布验证级联驱逐深度；tier 利用率验证饱和度与 tail 策略。
+\textbf{注意：}事实表名为 \texttt{otsh\_op\_metrics}（非 \texttt{metrics}）。字段包括 \texttt{operation\_type}（\texttt{insert}/\texttt{query}/\texttt{delete}）、\texttt{probe\_count}、\texttt{kick\_count}、\texttt{latency\_ns}、\texttt{cubby\_tier}、\texttt{snapshot\_id}。服务端聚合查询实现见 \texttt{analytics\_summary\_json}，典型分析包括：\texttt{SELECT AVG(probe\_count) FROM otsh\_op\_metrics WHERE snapshot\_id=?}；按 \texttt{cubby\_tier} 分组平均探针；在 \texttt{cubby} 表上按 \texttt{tier} 求 \texttt{AVG(size/capacity)}；探针与踢出次数直方图等。
 
 \section{写入策略}
-高频路径禁止“每插入一行即写库”。实现上采用线程本地缓冲，按条数阈值（例如千条）批量 \texttt{INSERT}，降低锁竞争与刷盘开销；结构快照由手动触发，将当前 \texttt{cubby} 与 \texttt{slot\_snapshot} 导出，保证与某时刻逻辑状态一致。
+高频路径禁止“每操作一次即单独 \texttt{INSERT}”。实现将 \texttt{SqlMetricRow} 先入内存 \texttt{vector}，当积压达到 \texttt{1000} 条或显式 flush 时，以最多 \texttt{500} 行一批拼接多值 \texttt{INSERT} 写入 \texttt{otsh\_op\_metrics}。结构快照由 \texttt{/api/analytics/structure\_dump} 触发：遍历 \texttt{HashTable::visit\_structure}，再事务性替换对应 \texttt{snapshot\_id} 下的 \texttt{slot\_snapshot}/\texttt{cubby}/\texttt{facility}/\texttt{tier\_stat} 行。
 
-\section{前端展示}
-前端读取快照列表与聚合查询结果，绘制平均探针、tier 对比、直方图与尾延迟曲线（可选用 ECharts\cite{echarts} 等组件库）。图表与第 \ref{ch:design} 章中的不变量叙述一并阅读，可判断实现是否偏离理论分布。
+\section{无数据库基准}
+\texttt{otsh\_perf} 可脱离 MySQL 直接测量纯内存插入/查询/删除延迟，并输出进程内 \texttt{Metrics} 快照（人类可读信息走 \texttt{stderr}，单行 JSON 走 \texttt{stdout}，便于 \texttt{perf/results/} 目录收集）。适合作为算法热路径回归，与带库延迟的 HTTP 实验互为补充。
+
+\section{自动化测试与日志}
+\texttt{otsh\_tests} 对哈希表执行初始化与批量操作检查，结束时打印一行 JSON；若 MySQL 可用则写入 \texttt{otsh\_test\_session\_log}，否则可写文本日志（环境变量 \texttt{OTSH\_TEST\_LOG}）。
+
+\section{可视化}
+外部工具可读取 \texttt{/api/analytics/snapshots} 与 \texttt{/api/analytics/summary} 返回的 JSON，绘制平均探针、tier 对比、直方图与尾延迟曲线（可选用 ECharts\cite{echarts} 等组件库）。图表与第 \ref{ch:design} 章中的不变量叙述一并阅读，可判断实现是否偏离理论分布。
 
 \section{本章小结}
-实验设计围绕“可证明性质的可观测代理量”展开：用 \texttt{metrics} 刻画操作微观代价，用 \texttt{tier\_stat} 与 \texttt{cubby} 刻画宏观分布，用手工快照保证可重复对比。具体数值结果随运行环境与数据集变化，本文不绑定某一组绝对数字。
+实验设计围绕“可证明性质的可观测代理量”展开：用 \texttt{otsh\_op\_metrics} 刻画操作微观代价，用 \texttt{tier\_stat} 与 \texttt{cubby} 刻画宏观分布，用 \texttt{/api/analytics/structure\_dump} 保证结构可重复导出。具体数值结果随运行环境与数据集变化，本文不绑定某一组绝对数字。

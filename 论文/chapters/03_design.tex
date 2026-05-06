@@ -9,7 +9,7 @@
 当 bin 与 cubby 尺度为 \(\mathrm{polylog}\,n\) 时，需在总空间接近信息论线性的前提下存储\textbf{变长}元数据并支持常数时间读写；同时需在设施内把键映射到“目标 cubby 与槽位”。以下两个构件构成文献构造中的“中间层”，负责在 \(\mathrm{polylog}\,n\) 尺度内紧凑表示与常数时间访问。
 
 \subsection{MiniArray：变长条目的紧凑动态数组}
-每个 cubby 内需维护长度约为 \(\mathrm{polylog}\,n\) 的条目数组，但每条元数据的比特长度不同且随更新变化。MiniArray 将数组视为字对齐的 packed B-树：叶存实际条目比特，内部节点存子块偏移与枢轴（索引范围）；因总条目数为 \(\mathrm{polylog}\,n\)，指针与枢轴可用 \(\Theta(\log\log n)\) 比特打包进单字，树高 \(O(1)\)。分裂、合并与单点更新均摊常数时间；节点上的位运算可通过预建查找表在 \(O(1)\) 内完成（四俄式思想）。由此，总空间与所有条目总比特数成线性关系，且支持工程上要求的“每槽读写”接口。
+每个 cubby 内需维护长度约为 \(\mathrm{polylog}\,n\) 的条目数组，但每条元数据的比特长度不同且随更新变化。文献与理想化工程叙述中，MiniArray 可视为字对齐的 packed B-树：叶存实际条目比特，内部节点存子块偏移与枢轴（索引范围）；因总条目数为 \(\mathrm{polylog}\,n\)，指针与枢轴可用 \(\Theta(\log\log n)\) 比特打包进单字，树高 \(O(1)\)，并支持均摊常数的单点更新与查表加速。当前仓库中的可运行原型采用\textbf{连续比特缓冲 + 偏移表}的变长编码实现（见第 \ref{ch:impl} 章），在单 cubby 的 polylog 规模下以简化重打包换取实现复杂度；复杂度轮廓与信息论目标仍以本节及文献为参照。
 
 \subsection{Local Query Router：少量键到槽索引的映射}
 在设施的 \(D\) 数组及 cubby 内部，需对规模至多为 \(O(\log n/\log\log n)\) 的键集合回答“键 \(x\) 落在何处”。实现上对键哈希为足够长的随机二进制串，构建压缩前缀二进制 Trie：仅在能区分彼此的最短唯一前缀处停止，叶部存储 cubby 标识与槽索引等变长元数据；整棵 Trie 按深度优先遍历编码为紧凑比特流。查询时沿查询键的哈希串在编码流上行走，配合按半字（或半字宽）查表实现期望常数时间的跳转；插入与删除则更新 Trie 与编码流。对给定元素个数，编码期望长度为 \(O(\log n)\) 比特量级（高概率不超过同阶上界）。
@@ -29,13 +29,13 @@ tier 与容量由全局 \(N,K\) 及迭代对数导出：容量近似为 \(K/(\lo
 \subsection{Facility 与路由层}
 全表划分为约 \(N/K\) 个设施（Facility），每个设施聚合约 \(K=\mathrm{polylog}\,N\) 个键的路由与 cubby 集合。设施内维护：
 \begin{itemize}
-  \item \texttt{D}：长度为 \(K\) 的 MiniArray，每项为一个 Local Query Router；对键 \(x\)，由 \(\pi(x)\) 的低 \(\log K\) 位索引到 \texttt{D[b]}，得到目标 cubby 与槽位；
+  \item \texttt{D}：长度为 \(K\) 的路由器表，每项为一个 Local Query Router（代码中为 \texttt{std::vector<Router>}，与 ``按桶索引的紧凑路由阵列'' 同构）；对键 \(x\)，由 \(\pi(x)\) 的低 \(\log K\) 位索引到 \texttt{D[b]}，得到目标 cubby 与槽位；
   \item 多 tier 的 cubby 列表及 \textbf{tail}：除唯一 tail 外，其余 cubby 均保持满；插入一律进入 tail，删除非 tail 槽时从 tail 随机搬迁一枚元素填补，以维持饱和度不变量。
 \end{itemize}
 设施索引由 \(\pi(x)\) 的更高位段与全局 \(N,K\) 共同决定（商压缩模式下 \(g^\ast(x)=\pi(x)\bmod N\) 时，低 \(\log N\) 位拆分出设施与桶索引）。
 
 \subsection{全局状态与动态容量}
-全局维护当前键数 \(n\)、容量上界 \(N\)（取 \(2\) 的幂）、\(K\) 及设施指针数组；\texttt{ResizeManager} 负责在 \(n>N\) 或 \(n<N/4\) 时触发倍增/减半迁移；\texttt{RebuildScheduler} 与 \texttt{maintainInvariants} 在设施内根据 tier 计数偏离触发创建/销毁重建。
+全局维护当前键数 \(n\)、容量上界 \(N\)（取 \(2\) 的幂）、\(K\) 及设施向量；\textbf{双表迁移}（活跃 \texttt{TableState} 与可选的旧表）在 \(n\) 超过负载因子上界或低于 \(N/4\) 时触发倍增/减半，并按预算步数渐进搬迁；\texttt{RebuildScheduler} 与 tier 计数驱动的重建/合并逻辑在设施内维护分布不变量（与第 \ref{ch:impl} 章实现细节对应）。
 
 \section{分布不变量与重建}
 设 \(n\) 为当前规模，第 \(j\) 级 tier 的 cubby 目标数量近似为
@@ -57,4 +57,4 @@ tier 与容量由全局 \(N,K\) 及迭代对数导出：容量近似为 \(K/(\lo
 令 \(g^\ast(x)=\pi(x)\bmod N\)，则顶 \(\log N\) 位可由路由过程隐式携带。Cubby 内 \(S\) 不重复存这 \(\log N\) 位，而在 \texttt{Meta} 中记录例如 \(\delta=g_I(x)-i\)（偏好槽与实际槽之差）及 \texttt{mid\_bits}（衔接 \(g_I\) 与 \(g^\ast\) 低段所需的中间位）。查询时由 \(r\)、\(g_I\) 与 \texttt{mid\_bits} 拼出 \(g^\ast\)，与 \(S\) 中高位载荷合并得 \(\pi(x)\)，再逆置换得原键。
 
 \section{模块依赖关系}
-逻辑依赖可概括为：\(\text{HashTable}\to\text{Facilities}\to(\texttt{D},\text{Cubbies},\text{tail})\)，Cubby 内部依赖 \((S,\texttt{Meta},\texttt{FreeSlotTree})\) 与 k-kick 插入；全局依赖 \texttt{ResizeManager} 与重建调度。该划分与实现代码中的头文件/源文件边界相对应。
+逻辑依赖可概括为：\(\text{HashTable}\to\text{Facilities}\to(\texttt{D},\text{Cubbies},\text{tail})\)，Cubby 内部依赖 \((S,\texttt{Meta},\texttt{FreeSlotTree})\) 与 k-kick 插入；全局依赖双表迁移状态机与 \texttt{RebuildScheduler}。该划分与 \texttt{ht.cpp}、\texttt{otsh/facility.h}、\texttt{otsh/cubby.h} 等源文件边界相对应。

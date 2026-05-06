@@ -1,23 +1,5 @@
-\chapter{接口与数据模式补充}
+\chapter{数据模式与运行配置补充}
 \label{app:api}
-
-\section{主要 HTTP API（与 \texttt{http\_server.cpp} 一致）}
-\texttt{otsh\_backend} 通过 HTTP 暴露操作与实验接口；写路径与 \texttt{/api/init} 在实现中与同一互斥锁序列化。路由如下（方法均为所列动词）：
-\begin{itemize}
-  \item \texttt{GET /health}：探活，响应体为纯文本 \texttt{ok}；
-  \item \texttt{POST /api/init}：JSON 体解析 \texttt{n}、\texttt{k}、可选 \texttt{reset}（默认真）、可选 \texttt{snapshot\_tag}（默认 \texttt{init}）；校验 \(n\in[10,5\,000\,000]\)，\(k\in[0,8]\)。
-
-    打开 MySQL、调用 \texttt{HashTable::init}，按 \texttt{reset} 清空主键表或 \texttt{bulk\_load} 已有键；创建 \texttt{snapshot\_meta} 行并刷新指标缓冲。MySQL 连接参数当前取自 \texttt{include/config.h} 中 \texttt{TableParams} 默认值（未从环境变量读取）；
-  \item \texttt{POST /api/insert}：体为 \texttt{\{"key": <uint64>\}}（字段名 \texttt{key}）；
-  \item \texttt{POST /api/query}、\texttt{POST /api/delete}：同上；
-  \item \texttt{POST /api/stats}：返回内存表状态与进程内 \texttt{Metrics} 汇总；
-  \item \texttt{POST /api/analytics/snapshots}：列出最近快照元数据（JSON）；
-  \item \texttt{POST /api/analytics/summary}：体含 \texttt{snapshot\_id}，返回该快照下 \texttt{otsh\_op\_metrics} 与 \texttt{cubby} 等聚合 JSON；
-  \item \texttt{POST /api/analytics/structure\_dump}：将当前 \texttt{HashTable::visit\_structure} 结果写入给定 \texttt{snapshot\_id} 关联的 \texttt{facility}、\texttt{cubby}、\texttt{slot\_snapshot}、\texttt{tier\_stat} 等表；
-  \item \texttt{POST /api/jobs/get}：轮询异步实验任务状态；
-  \item \texttt{POST /api/experiment/o1\_vs\_n}、\texttt{POST /api/experiment/ok\_vs\_k}：参数扫描实验入口，持续向 \texttt{otsh\_op\_metrics} 写入样本。
-\end{itemize}
-具体错误码与扩展字段以源码为准；可用任意 HTTP 客户端或脚本驱动，无需绑定特定前端框架。
 
 \section{关系模式（由 \texttt{ensure\_analytics\_ddl} 创建）}
 下列表在首次 \texttt{storage->open} 成功时按需创建。主键表名由 \texttt{TableParams::mysql\_table} 指定（默认 \texttt{otsh\_keys}），单列 \texttt{k BIGINT UNSIGNED PRIMARY KEY}，用于持久化当前键集（与内存结构同步策略以 \texttt{/api/init} 的 \texttt{reset} 与插入/删除路径为准）。

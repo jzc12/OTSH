@@ -26,11 +26,11 @@
     % 作者英文姓名
     % 一般使用拼音
     %
-    keywords = {哈希表,k-kick 树,商压缩,多 tier 重建,MySQL 指标},
+    keywords = {哈希表；时间空间权衡；探针复杂度；增强开放寻址；k-kick tree；元数据编码；动态可扩容；succinct 数据结构},
     % 中文关键词列表
     % 使用英文半角逗号(,)分隔
     %
-    keywords* = {Hash table,k-kick tree,Quotienting,Multi-tier rebuild,MySQL metrics},
+    keywords* = {hash tables, time--space tradeoff, probe complexity, enhanced open addressing, k-kick tree, metadata encoding, dynamic expansion, succinct data structures},
     % 英文关键词
     % 使用英文半角逗号(,)分隔
     %

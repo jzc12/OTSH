@@ -80,15 +80,19 @@
 \raggedbottom
 
 \begin{abstract}
-  开放寻址哈希表可归结为在线“球与槽”分配：每个键沿固定随机探针序列寻找槽位，插入与删除可移动已有键；平均探针复杂度与交换成本构成一对核心折中。本文依“底层驱逐上界—中间层紧凑编码—顶层组装”的顺序整理 OTSH 型构造在工程中的展开方式：以 k-kick 树在分层 bin 上做贪心优先级驱逐，使单次插入交换次数不超过 \(O(k)\)，并在随机模型下将平均探针控制在 \(O(\log^{(k)} n)\) 量级；继而给出 MiniArray 与局域查询路由器，再说明以 Cubby 封装 polylog 规模的存储数组、变长元数据与空闲槽位树，以 Facility 聚合约 \(K=\mathrm{polylog}\,N\) 个键的路由 MiniArray \(D\) 与多 tier 小隔间，并用唯一 tail 维持“除尾外全满”的饱和度不变量；以分布目标 \(t_j\) 触发创建/销毁重建与双表扩容缩容；以商压缩隐式携带路由高位，使载荷空间接近信息论下界。
-
-  实现上采用 C++20 单进程 HTTP 服务（\texttt{cpp-httplib}），MySQL 持久化键集与 \texttt{otsh\_op\_metrics} 操作指标，并附带无数据库依赖的 \texttt{otsh\_perf} 基准与 \texttt{otsh\_tests} 回归；热路径对指标采用内存缓冲、达千条或显式 flush 时批量写入，结构快照由 \texttt{/api/analytics/structure\_dump} 等接口触发。本文为当前仓库中与理论构件对齐的模块划分、表结构与运行配置提供可直接对照的叙述。
+哈希表是计算机科学中应用最广泛的基础数据结构之一，如何在查询时间与存储空间之间取得最优权衡，是哈希表领域长期存在的核心问题。本文以《On the Optimal Time/Space Tradeoff for Hash Tables》为理论基础，针对论文第 3、4、5 章节的关键算法与数据结构进行系统实现，完成从探针复杂度优化、元数据紧凑编码到完整哈希表系统的工程化落地。
+首先，针对探针复杂度问题，本文实现了基于 k-kick tree 的 balls-to-slots 放置策略。通过分层桶结构设计与贪心优先级驱逐机制，将单次插入与删除操作的元素移动次数控制在 $O(k)$ 复杂度，同时在随机哈希模型下将平均探针复杂度降至 $O(log^{(k)}n)$，实现了理论最优的时间–空间折衷。
+其次，针对哈希表查询路由元数据占用空间过大、访问效率低的问题，本文设计并实现 MiniArray 与 Local Query Router 两种紧凑数据结构。依托内存 B - 树与查找表加速技术，实现元数据的紧凑存储与常数时间操作，将单键元数据开销降至 $O(log log n)$ 比特，显著提升空间利用率。
+最后，本文基于上述核心组件构建完整的增强开放寻址哈希表。设计 Cubby 存储单元、Facility 管理结构以及动态扩容与重建机制，结合商压缩技术实现键的高效存储与还原，并通过分布不变量 $t_j $控制分层桶的创建与合并，最终实现支持 $O(1) $查询、$O(k)$ 插入删除、动态可伸缩且空间浪费逼近信息论下界的高效哈希表。
+本文工作将前沿理论成果转化为可运行、可验证的工程实现，验证了最优时间–空间权衡哈希表的可行性，为高性能、低空间开销的字典结构设计提供了完整的实现方案与实践参考。
 \end{abstract}
 
 \begin{abstract*}
-  Open-addressing hash tables can be viewed as an online balls-into-bins process: each key follows a fixed random probe sequence, and inserts/deletes may relocate existing keys, trading average probe complexity against swap cost. Following the same bottom-up organization (eviction bounds, compact metadata, global assembly), this thesis presents an engineering-oriented account of an OTSH-style construction: a k-kick tree performs greedy prioritized eviction over layered bins, bounding swaps per insert by \(O(k)\) while targeting \(O(\log^{(k)} n)\) average probes in the random model; a Cubby packs a polylog-sized slot array, variable-length MiniArray metadata, and a free-slot tree; a Facility aggregates roughly \(K=\mathrm{polylog}\,N\) keys via a routing MiniArray \(D\) and multi-tier cubbies with a unique tail enforcing an almost-everywhere-full saturation invariant; tier-count targets \(t_j\) trigger split/merge rebuilds alongside doubled/halved resizing; quotienting hides routing bits to approach information-theoretic space.
-
-  The implementation ships a C++20 single-process HTTP server (\texttt{cpp-httplib}), MySQL for the key table and an \texttt{otsh\_op\_metrics} fact table, plus a MySQL-free \texttt{otsh\_perf} benchmark and \texttt{otsh\_tests}; hot paths buffer per-operation metrics and bulk-insert on threshold or explicit flush, while structural dumps are triggered via \texttt{/api/analytics/structure\_dump}. The thesis records terminology and schema aligned with this repository for reproducible experimentation.
+  Hash tables are a core data structure in computer science, with the optimal trade-off between time and space remaining a central open problem for over sixty years. This thesis, based on the theoretical results from arXiv:2111.00602, focuses on the core content of chapters 3, 4, and 5, completing the design of the optimal solution for the probe complexity problem, the query routing metadata encoding, and the implementation of the optimal enhanced open-addressing hash table.
+  First, for the probe complexity problem, the k-kick tree balls-to-slots scheme is designed, through greedy prioritized eviction and layered bin structure, bounding the single insertion swap count to $O(k)$ complexity, and controlling the average probe complexity to $O(log^{(k)}n)$ level in the random model.
+  Second, for the query routing metadata encoding problem, the MiniArray and Local Query Router two compact components are designed, through memory B-tree and lookup table acceleration, compressing the bit length of each element to $O(log log n)$ level, while supporting O(1) read and write.
+  Finally, for the implementation of the optimal enhanced open-addressing hash table, the Cubby, Facility, and global expansion/reconstruction process and quotient compression key reconstruction are designed, through the distribution invariant $t_j$ triggering create/destroy reconstruction, completing the implementation of the optimal enhanced open-addressing hash table.
+  This work has converted frontier theoretical results into runnable and verifiable engineering implementations, validated the feasibility of the optimal time–space trade-off hash table, and provided a complete implementation scheme and practical reference for the design of high-performance, low-space-overhead dictionary structures.
 \end{abstract*}
 
 % 生成目录

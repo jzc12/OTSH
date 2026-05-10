@@ -1,32 +1,51 @@
-\chapter{实验与观测设计}
+\chapter{系统验证与实验设计}
 \label{ch:exp}
 
-\section{实验目的}
-在理论结构固定而工程参数可调的前提下，实验关注三类可观测量：（1）探针与踢出次数沿操作类型的分布；（2）各 tier cubby 的负载因子与 cubby 数量是否贴近第 \ref{ch:design} 章给出的 \(t_j\) 目标；（3）tail 行为与延迟尾部是否与理论假设一致。数据库侧以 \texttt{otsh\_op\_metrics} 为核心事实表，快照维表记录某次 \texttt{snapshot\_id} 下的结构导出结果，便于脚本或外部可视化工具复现图表。
+\section{验证目标}
+本文验证的重点不是重新证明 OTSH 理论，而是检查当前系统是否把设计文档中的关键原理落实到了可运行路径中。验证目标分为四类：第一，基本语义正确，即插入后的键可查，删除后的键不可查，重复插入不产生重复元素；第二，操作代价可观测，即路由步数、踢出次数、移动次数和延迟能够被记录；第三，结构状态可导出，即 Facility、Cubby、Slot 和 tier 分布可以形成快照；第四，实验可复现，即相同规模、种子和参数下能够得到可比较的 JSON 或数据库记录。
 
-\section{快照与维度表}
-\texttt{snapshot\_meta} 标记一次 \texttt{/api/init} 或手工标记的快照：字段 \texttt{init\_param\_n}、\texttt{table\_n}、\texttt{table\_k} 分别对应初始化请求规模与当时内存表 \(N,K\)（命名规避 Windows 下大小写不敏感导致的列名冲突）。\texttt{facility} 记录设施 id、所属快照与 \texttt{tail\_cubby\_id}。\texttt{cubby} 记录 \texttt{tier}、\texttt{capacity}、\texttt{size}、\texttt{is\_tail} 等，用于展示 tier 分布与利用率。
+由于当前原型在 Router、MiniArray 和 k-kick 细节上存在工程化简化，实验结论应表述为“实现行为验证”和“指标趋势观察”，而不是对原论文渐近上界的严格实证证明。
 
-\section{槽位与 tier 聚合}
-\texttt{slot\_snapshot} 按快照存储 \texttt{cubby\_id}、\texttt{slot\_index}、是否占用、可选 \texttt{key\_hash}（实现中取 \(\pi(x)\)）及 \texttt{probe\_length}。该表刻意不存比特级 \texttt{Meta} 与路由器编码，以降低快照体积并聚焦“最终落槽”结果。\texttt{tier\_stat} 按 \((\texttt{snapshot\_id},\texttt{facility\_id},\texttt{tier})\) 聚合 \texttt{cubby\_count}，用于对照
-\[
-  t_j \approx \frac{\bigl(\log^{(j)} n\bigr)^2}{\bigl(\log^{(j+1)} n\bigr)^2}.
-\]
+\section{功能正确性测试}
+\texttt{otsh\_tests} 是系统的自动化回归入口。该程序直接调用 \texttt{HashTable}，不经过 HTTP 层，因此更适合检查核心数据结构本身。测试流程包括：
+\begin{itemize}
+  \item 初始化哈希表，并检查返回状态与表状态中的 \(N\)、Facility 数量是否有效；
+  \item 使用固定随机种子生成唯一键集合，执行批量插入，要求每个新键返回 \texttt{inserted=true}；
+  \item 对全部已插入键执行查询，要求返回 \texttt{found=true}；
+  \item 随机删除一半键，要求删除操作成功；
+  \item 再次查询已删除键，要求返回未命中；
+  \item 对剩余键重复插入，要求返回 \texttt{inserted=false}，验证幂等语义。
+\end{itemize}
 
-\section{指标表与典型 SQL}
-\textbf{注意：}事实表名为 \texttt{otsh\_op\_metrics}（非 \texttt{metrics}）。字段包括 \texttt{operation\_type}（\texttt{insert}/\texttt{query}/\texttt{delete}）、\texttt{probe\_count}、\texttt{kick\_count}、\texttt{latency\_ns}、\texttt{cubby\_tier}、\texttt{snapshot\_id}。服务端聚合查询实现见 \texttt{analytics\_summary\_json}，典型分析包括：\texttt{SELECT AVG(probe\_count) FROM otsh\_op\_metrics WHERE snapshot\_id=?}；按 \texttt{cubby\_tier} 分组平均探针；在 \texttt{cubby} 表上按 \texttt{tier} 求 \texttt{AVG(size/capacity)}；探针与踢出次数直方图等。
+测试程序结束时输出一行 JSON，其中包含 \texttt{all\_passed}、通过和失败数量、每个 case 的名称与结果，以及 \texttt{ops\_insert}、\texttt{ops\_query}、\texttt{ops\_delete}、\texttt{insert\_moved\_total}、\texttt{delete\_moved\_total} 等指标摘要。若 MySQL 可用，结果追加到 \texttt{otsh\_test\_session\_log}；否则写入本地测试日志。这样，功能验证既能由进程退出码判断，也能留下可审计记录。
 
-\section{写入策略}
-高频路径禁止“每操作一次即单独 \texttt{INSERT}”。实现将 \texttt{SqlMetricRow} 先入内存 \texttt{vector}，当积压达到 \texttt{1000} 条或显式 flush 时，以最多 \texttt{500} 行一批拼接多值 \texttt{INSERT} 写入 \texttt{otsh\_op\_metrics}。结构快照由 \texttt{/api/analytics/structure\_dump} 触发：遍历 \texttt{HashTable::visit\_structure}，再事务性替换对应 \texttt{snapshot\_id} 下的 \texttt{slot\_snapshot}/\texttt{cubby}/\texttt{facility}/\texttt{tier\_stat} 行。
+\section{性能基准}
+\texttt{otsh\_perf} 用于隔离算法热路径。它不链接 MySQL，也不经过 HTTP JSON 编解码，主要测量内存中的插入、顺序命中查询、随机命中查询、删除和混合查询。程序支持命令行参数 \texttt{n\_insert}、\texttt{n\_rand\_queries}、\texttt{table\_n\_hint}，并通过环境变量 \texttt{OTSH\_SEED} 控制随机种子。
 
-\section{无数据库基准}
-\texttt{otsh\_perf} 可脱离 MySQL 直接测量纯内存插入/查询/删除延迟，并输出进程内 \texttt{Metrics} 快照（人类可读信息走 \texttt{stderr}，单行 JSON 走 \texttt{stdout}，便于 \texttt{perf/results/} 目录收集）。适合作为算法热路径回归，与带库延迟的 HTTP 实验互为补充。
+每个阶段记录操作数、墙钟时间、平均延迟、p50、p95 和 p99。人类可读结果输出到 \texttt{stderr}，单行 JSON 输出到 \texttt{stdout}，便于脚本收集到 \texttt{perf/results/}。这些数据可以用于回答三类问题：规模增加时查询延迟是否平稳；插入和删除是否出现异常尾部；改变参数 \(k\) 或初始容量时，移动次数与延迟是否发生可解释变化。
 
-\section{自动化测试与日志}
-\texttt{otsh\_tests} 对哈希表执行初始化与批量操作检查，结束时打印一行 JSON；若 MySQL 可用则写入 \texttt{otsh\_test\_session\_log}，否则可写文本日志（环境变量 \texttt{OTSH\_TEST\_LOG}）。
+\section{指标与数据库观测}
+操作级指标以 \texttt{SqlMetricRow} 形式产生，核心字段包括 \texttt{operation\_type}、\texttt{probe\_count}、\texttt{kick\_count}、\texttt{latency\_ns}、\texttt{cubby\_tier} 和 \texttt{snapshot\_id}。存储层先把指标放入内存缓冲，再批量写入 \texttt{otsh\_op\_metrics}，避免高频操作逐条落库造成过大扰动。
 
-\section{可视化}
-外部工具可读取 \texttt{/api/analytics/snapshots} 与 \texttt{/api/analytics/summary} 返回的 JSON，绘制平均探针、tier 对比、直方图与尾延迟曲线（可选用 ECharts\cite{echarts} 等组件库）。图表与第 \ref{ch:design} 章中的不变量叙述一并阅读，可判断实现是否偏离理论分布。
+这些字段对应第 \ref{ch:bg} 章中的理论量。\texttt{probe\_count} 可用于观察路由成本，\texttt{kick\_count} 可用于观察更新中的交换成本，\texttt{latency\_ns} 用于描述工程延迟，\texttt{cubby\_tier} 可用于区分不同层级的行为差异。典型查询包括按操作类型统计平均和分位延迟、按 tier 统计平均踢出次数、按快照比较不同参数下的路由步数。
+
+结构快照由 \texttt{HashTable::visit\_structure} 驱动。系统把 Facility、Cubby、Slot 和 tier 聚合写入对应表。 \texttt{facility} 记录 tail 所在 cubby，\texttt{cubby} 记录 tier、capacity、size 和 \texttt{is\_tail}，\texttt{slot\_snapshot} 记录槽位是否占用及 \(\pi(x)\) 形式的 key hash，\texttt{tier\_stat} 记录每个 Facility 在各 tier 上的 cubby 数量。这些表可用于检查 tail 是否唯一、非 tail cubby 是否接近满载、tier 数量是否偏离目标分布。
+
+\section{结构不变量验证}
+围绕设计章中的不变量，本文建议采用以下检查方式。
+
+\begin{itemize}
+  \item \textbf{tail 唯一性。} 在每个 Facility 的快照中统计 \texttt{is\_tail=true} 的 cubby 数量，应为 1 或处于可解释的初始化状态；
+  \item \textbf{容量利用率。} 对非 tail cubby 计算 \(\texttt{size}/\texttt{capacity}\)，检查是否保持较高利用率；
+  \item \textbf{tier 分布。} 将 \texttt{tier\_stat} 中的实际 cubby 数与 \(t_j\) 的目标趋势比较，观察重建是否能把分布拉回合理范围；
+  \item \textbf{移动成本。} 对 \texttt{kick\_count} 和 \texttt{insert\_moved\_total} 做直方图，检查是否存在频繁长链；
+  \item \textbf{恢复正确性。} 通过查询命中和删除后未命中间接验证商压缩恢复路径；必要时结合结构快照中的 \(\pi(x)\) 值进行抽查。
+\end{itemize}
+
+\section{可视化与结果呈现}
+实验结果可以从两类来源生成图表。一类是 \texttt{otsh\_perf} 输出的 JSON，适合画不同规模下的延迟分位数和吞吐；另一类是 HTTP 分析接口或 MySQL 表，适合画平均探针、踢出次数、tier 分布、cubby 利用率和尾延迟曲线。可视化工具可以选用 ECharts\cite{echarts} 或其他图表库，本文不限定具体前端实现。
+
+论文呈现实验结果时，应把图表解释与系统实现联系起来。例如，若删除阶段的移动次数高于查询阶段延迟变化，应回到 tail 补洞和迁移逻辑解释；若某组参数下重建事件频繁，应结合 tier 分布和容量利用率分析。这样能避免只罗列性能数字，也能突出本文关注的“原理实现和验证”。
 
 \section{本章小结}
-实验设计围绕“可证明性质的可观测代理量”展开：用 \texttt{otsh\_op\_metrics} 刻画操作微观代价，用 \texttt{tier\_stat} 与 \texttt{cubby} 刻画宏观分布，用 \texttt{/api/analytics/structure\_dump} 保证结构可重复导出。具体数值结果随运行环境与数据集变化，本文不绑定某一组绝对数字。
+本章给出了系统验证方案。功能测试证明基本语义，性能基准隔离内存热路径，HTTP 接口验证服务化运行，数据库指标和结构快照用于观察理论量在工程中的代理表现。所有实验都围绕实现是否忠实表达设计文档中的核心机制展开，而不是用单次运行数字替代严格理论证明。

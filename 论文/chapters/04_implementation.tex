@@ -1,31 +1,50 @@
-\chapter{实现要点}
+\chapter{系统实现}
 \label{ch:impl}
 
-\section{技术栈与交付物}
-本仓库以 CMake（要求 $\geq$3.20）组织构建：核心为 C++20 可执行文件 \texttt{otsh\_backend}（HTTP 服务）、\texttt{otsh\_tests}（内存表回归并可写 MySQL 测试日志）、\texttt{otsh\_perf}（纯内存插入/查询/删除延迟与进程内 \texttt{Metrics} 汇总，不链接 MySQL）。HTTP 层依赖单头库 \texttt{cpp-httplib}\cite{cpphttplib} 与 \texttt{nlohmann/json}\cite{nlohmannjson}；可选置于 \texttt{third\_party} 或通过 FetchContent 获取。持久化与观测走 MySQL C API（\texttt{libmysqlclient}/MariaDB 兼容），由 \texttt{src/storage\_mysql.cpp} 在首次连接时 \texttt{CREATE TABLE IF NOT EXISTS} 分析侧各表。
+\section{工程结构}
+当前仓库使用 CMake 管理 C++20 工程，主要生成三个可执行文件。第一个是 \texttt{otsh\_backend}，负责启动 HTTP 服务、连接存储层并对外提供实验接口；第二个是 \texttt{otsh\_tests}，用于执行内存哈希表回归测试，并在条件允许时写入测试会话日志；第三个是 \texttt{otsh\_perf}，不链接 MySQL，专门测量纯内存插入、查询和删除路径。HTTP 层使用 \texttt{cpp-httplib}\cite{cpphttplib} 和 \texttt{nlohmann/json}\cite{nlohmannjson}，持久化层使用 MySQL/MariaDB 客户端接口\cite{mysqlmanual}。
 
-\section{运行形态与并发模型}
-\texttt{otsh\_backend} 内持有一个全局 \texttt{std::mutex}（\texttt{service\_mu}），对 \texttt{/api/init} 与所有写路径（插入/删除及依赖表状态的实验任务）加锁，保证与当前“单 writer、可重复实验”目标一致；查询与统计在实现中同样经该锁与表状态交互，行为以代码为准。探活为 \texttt{GET /health}，返回纯文本 \texttt{ok}。进程日志默认写 \texttt{backend.log}，可通过环境变量 \texttt{LOG\_FILE} 覆盖。监听地址与端口由 \texttt{BIND\_HOST}（默认 \texttt{0.0.0.0}）、\texttt{PORT}（默认 \texttt{8080}）指定。
+核心哈希表的对外接口定义在 \texttt{include/ht.h}。接口包括 \texttt{init}、\texttt{insert}、\texttt{query}、\texttt{erase}、\texttt{bulk\_load}、\texttt{state}、\texttt{visit\_structure} 和 \texttt{pi\_of}。这些接口覆盖了论文中的基本操作，也为实验章中的结构快照和指标采集提供入口。真正的数据结构实现集中在 \texttt{src/ht.cpp} 的 \texttt{HashTable::Impl} 中，其他头文件主要承载可组合的小模块。
 
-\section{配置与存储入口}
-\texttt{TableParams}（\texttt{include/config.h}）描述初始化规模 \texttt{n}、占位参数 \texttt{k}、\texttt{load\_factor}、三枚种子 \texttt{seed1..seed3} 以及 MySQL 主机/端口/用户/密码/库名/主键表名（默认表名 \texttt{otsh\_keys}，单列 \texttt{k BIGINT UNSIGNED PRIMARY KEY}）。当前 \texttt{/api/init} 请求体主要解析 \texttt{n}、\texttt{k}、\texttt{reset}、\texttt{snapshot\_tag}，其余字段沿用上述默认值；自动化测试程序另支持 \texttt{OTSH\_MYSQL\_*} 环境变量覆盖连接信息。初始化成功后创建分析用 \texttt{snapshot\_id} 并作为后续 \texttt{otsh\_op\_metrics} 行的外键上下文。
+\section{参数与可逆置换}
+初始化参数由 \texttt{TableParams} 描述，包含目标规模 \(n\)、折中参数 \(k\)、负载因子、随机种子和存储配置。系统将容量 \(N\) 取为不小于需求的 2 的幂，并派生局部规模 \(K\) 与 Facility 数量。这样做一方面简化了位运算拆分，另一方面让 \(g^\ast(x)=\pi(x)\bmod N\) 可以直接通过低位截取得到。
 
-\section{核心数据结构映射}
-对外类型为 \texttt{HashTable}（\texttt{include/ht.h}，实现于 \texttt{src/ht.cpp} 的 \texttt{HashTable::Impl}）。内部以嵌套结构 \texttt{TableState} 保存当前表的 \(N\)（不小于 2 的 2 的幂）、\(K\)、\texttt{std::vector<Facility>}；另以 \texttt{std::optional<TableState> old\_} 与 \texttt{migrate\_progress\_} 实现\textbf{双表扩容/缩容迁移}：当负载超过 \texttt{load\_factor} 或键数低于 \(N/4\) 时分配新表并逐设施预算化搬迁，迁完后释放旧表。文献中的 \texttt{ResizeManager} 在仓库 \texttt{include/otsh/resize.h} 中仍为占位类型，实际迁移逻辑内联于 \texttt{HashTable::Impl}。
+\texttt{PermutationHash} 实现 64 位可逆置换。它把输入拆成高低两个 32 位半区，使用三轮 Feistel 结构混合，轮密钥由种子经 \texttt{splitmix64} 派生。Feistel 结构的好处是无论轮函数是否可逆，整体置换都可以反向计算。系统在查询时利用 \(\pi^{-1}\) 做键恢复校验，在结构导出时也可用 \texttt{pi\_of} 记录键的置换像。
 
-\texttt{RebuildScheduler}（\texttt{include/otsh/rebuild.h}）维护 \texttt{std::deque} 任务队列，在每次插入后的预算步数内执行 tier 合并/拆分等后台工作，对应设计章分布不变量触发逻辑的工程化版本。
+\section{核心数据结构}
+\subsection{HashTable 与 TableState}
+\texttt{HashTable::Impl} 内部维护当前活动表状态。活动表包含元素数 \(n\)、容量 \(N\)、局部规模 \(K\) 和 \texttt{std::vector<Facility>}。当需要扩容或缩容时，实现会创建新表，并把旧表保存在可选状态中，通过迁移进度逐步搬迁元素。迁移完成后释放旧表。这一策略对应设计章的双表迁移，避免一次更新承担全部 rehash 成本。
 
-\texttt{PermutationHash} 将 64 位键高/低各 32 位视作 Feistel 两半，使用三轮轮函数（轮密钥取自 \texttt{k1..k3}，由 \texttt{splitmix64} 与种子派生）；\texttt{k4} 与额外种子字段一并派生但\textbf{不参与}当前三轮 Feistel 轮函数，保留作扩展。逆置换 \texttt{inverse} 对称实现，用于校验与调试路径。
+操作结果结构也带有验证字段。\texttt{InsertResult} 和 \texttt{DeleteResult} 中包含 \texttt{kick\_count} 和 \texttt{router\_probe\_steps}，\texttt{QueryResult} 中包含 \texttt{router\_probe\_steps}。这些字段不是业务返回值，而是为了把理论中的交换成本、路由路径转化为可记录指标。
 
-每个 \texttt{Facility}（\texttt{include/otsh/facility.h}）包含：按 tier 分组的二维 \texttt{std::vector}，内层元素为 \texttt{std::unique\_ptr<Cubby>}；\texttt{tail} 指针与独占 \texttt{tail\_owned}；长度为 \(K\) 的 \texttt{std::vector<Router>} 即设施内路由器数组 \texttt{D}。每个 \texttt{Cubby}（\texttt{include/otsh/cubby.h}）含 \texttt{tier}、\texttt{capacity}、\texttt{size}、商压缩载荷槽向量 \texttt{slots}（元素为 \texttt{std::optional<uint64\_t>}）、占用索引表、\texttt{FreeSlotTree free\_slots} 与 \texttt{MiniArray meta}。
+\subsection{Facility 与 Cubby}
+\texttt{include/otsh/facility.h} 中的 \texttt{Facility} 保存多 tier cubby、tail 和路由器数组 \texttt{D}。其中 \texttt{tiers} 是按层组织的二维容器，元素为 \texttt{std::unique\_ptr<Cubby>}；\texttt{tail} 指向当前唯一允许非满的 cubby；\texttt{D} 是 \texttt{std::vector<Router>}，负责设施内局部定位。
 
-\section{MiniArray 与路由器（工程形态）}
-\texttt{MiniArray}（\texttt{include/otsh/mini\_array.h}）当前实现为：每条目变长比特写入连续 \texttt{buf\_}，以 \texttt{offsets\_} 与 \texttt{bitlens\_} 定位；更新允许对单 cubby 规模 \(m\) 做 \(O(m)\) 重打包，满足“polylog 规模下可接受”的原型目标，与设计章所述 packed B-树理想模型相比更偏工程折中。
+\texttt{include/otsh/cubby.h} 中的 \texttt{Cubby} 保存 tier、capacity、size、槽数组、占用索引、空闲槽树和 \texttt{MiniArray} 元数据。槽数组类型为 \texttt{std::optional<uint64\_t>}，存放的是商压缩后的 payload。占用索引用于快速遍历已有元素，空闲槽树用于插入时寻找可用位置，元数据数组用于保存每个槽的恢复信息。
 
-\texttt{Router}（\texttt{include/otsh/router.h}，对应设计章 Local Query Router）用 64 位哈希串上的二叉 trie 加碰撞桶管理 \texttt{key\(\to\)(Cubby*, slot)}；维护编码比特流规模 \texttt{bits\_total} 供空间统计。插入与删除后允许整表重建 trie/编码（元素数为 polylog 时开销可控），与“均摊常数跳转”的理论目标之间留有优化空间。
+\subsection{MetaEntry 与商压缩}
+\texttt{include/otsh/meta\_entry.h} 和 \texttt{src/meta\_entry.cpp} 实现 MetaEntry 的构造、编码、解码与键恢复。核心函数包括 \texttt{quotient\_payload}、\texttt{make\_meta\_entry}、\texttt{encode\_meta\_entry}、\texttt{decode\_meta\_entry} 和 \texttt{reconstruct\_gx\_pi}。
 
-\section{操作主路径与指标}
-插入/查询/删除主流程与第 \ref{ch:design} 章叙述一致：经 \(\pi(\texttt{key})\) 与设施、桶索引定位 \texttt{D[b]}，在 tail cubby 上执行 k-kick 相关逻辑并维护路由器与商压缩元数据。每次操作可将 \texttt{probe\_count}/\texttt{kick\_count}/\texttt{latency\_ns}/\texttt{cubby\_tier} 等封装为 \texttt{SqlMetricRow}，经 \texttt{IStorage::analytics\_enqueue\_metric} 进入缓冲；缓冲长度达到 1000 或显式 \texttt{analytics\_flush\_metrics(true)} 时，以最多 500 行一批多值 \texttt{INSERT} 写入 \texttt{otsh\_op\_metrics}。进程内另有一套原子计数器 \texttt{Metrics}（\texttt{include/metrics.h}）汇总吞吐、移动步数、延迟直方图与重建/扩容事件，\texttt{otsh\_perf} 直接读取其快照。
+插入时，系统根据 \(\pi(x)\)、设施编号、Cubby 容量和实际 slot 生成 \texttt{MetaEntry}。其中 \texttt{delta} 保存偏好槽与实际槽的差，\texttt{mid\_bits} 保存拼接低位所需的信息。查询时，系统先通过 Router 得到 slot，再解码该槽元数据，用 payload 和上下文重建 \(\pi(x)\)。如果逆置换得到的键与查询键一致，则查询成功。这个过程把商压缩从公式变成了可执行路径。
 
-\section{HTTP 与分析接口（摘要）}
-除 \texttt{/api/init} 外，实现还提供 \texttt{/api/insert}、\texttt{/api/query}、\texttt{/api/delete}、\texttt{/api/stats}；分析侧含 \texttt{/api/analytics/snapshots}、\texttt{/api/analytics/summary}、\texttt{/api/analytics/structure\_dump}；长任务轮询 \texttt{/api/jobs/get}；参数扫描实验 \texttt{/api/experiment/o1\_vs\_n}、\texttt{/api/experiment/ok\_vs\_k}。各路径的请求/响应 JSON 字段与错误码以仓库源码为准，附录仅补充库表与环境变量。
+\section{MiniArray 与 Router 的工程实现}
+\texttt{MiniArray} 位于 \texttt{include/otsh/mini\_array.h}。它用 \texttt{buf\_} 保存连续 bit buffer，用 \texttt{offsets\_} 和 \texttt{bitlens\_} 定位每个条目。读取时按 bit 拷贝出对应条目；更新时重新计算偏移并重打包。该实现没有采用论文级 packed B-树和查表加速，因此单次更新不是严格 \(O(1)\)。不过，Cubby 本身是小规模结构，重打包代价在原型中可接受，并且 \texttt{bits\_total} 可以直接用于空间观测。
+
+\texttt{Router} 位于 \texttt{include/otsh/router.h} 和 \texttt{src/router.cpp}。它把键经 \texttt{splitmix64} 映射为 64 位随机串，在二叉 trie 中保存从键到 \((\mathrm{CubbyPtr},\mathrm{slot})\) 的映射。实现中保留碰撞桶，避免 64 位哈希串完全相同导致信息丢失。插入和删除后调用重建逻辑，重新计算 trie 与编码 bit 数。该实现的重点是正确表达 Local Query Router 的定位语义，并提供 \texttt{bits\_total} 和路由步数，而不是完成理论中的半字查表优化。
+
+\section{插入、查询和删除实现}
+插入时，\texttt{HashTable::Impl} 先计算置换值并定位 Facility 与路由桶。如果 Router 中已有该键，则返回 \texttt{inserted=false}，保持重复插入幂等。若为新键，则在 tail Cubby 中寻找槽位，必要时执行有限踢出和搬迁；随后写入 payload、编码 MetaEntry、更新 \texttt{FreeSlotTree} 与 Router，并记录移动次数、路由步数和元数据位数。插入完成后，系统检查 tail 状态、重建任务和扩容条件。
+
+查询实现复用同样的设施和桶定位逻辑。Router 返回目标后，系统读取槽位 payload 和元数据，调用恢复函数重建置换像并验证键。若恢复失败、slot 为空或键不一致，则返回未命中。由于 Router 直接给出位置，查询路径不会退化为扫描整个 Cubby。
+
+删除实现先定位键，随后清理 Router 记录、slot 和 MetaEntry。如果删除位置不在 tail 中，系统尝试从 tail 取出元素迁入空槽，以维持非 tail cubby 的满载不变量。删除后同样更新指标，并检查是否需要缩容。该过程对应理论中删除后局部重排的工程化版本。
+
+\section{后台重建与扩缩容}
+\texttt{include/otsh/rebuild.h} 中的 \texttt{RebuildScheduler} 是一个任务队列，每次操作消耗有限预算执行部分任务。\texttt{src/ht.cpp} 中的重建逻辑根据 tier 分布决定拆分或合并 cubby，并通过调度器分摊执行。进程内指标会记录 \texttt{rebuild\_down} 和 \texttt{rebuild\_up} 事件，便于观察分布维护是否频繁触发。
+
+扩缩容逻辑内联在 \texttt{HashTable::Impl} 中。负载超过上界时启动扩容，元素数低于阈值时启动缩容。迁移过程中，新表与旧表同时存在，查询和删除需要考虑两边状态；迁移完成后旧表释放。指标中的 \texttt{resize\_start} 和 \texttt{resize\_finish} 可用于确认迁移是否按预期闭环。
+
+\section{工程差异说明}
+当前实现与论文理想结构存在三个主要差异。第一，k-kick 树没有以独立完整类实现全部分层饱和逻辑，而是在 \texttt{HashTable::Impl} 的插入路径中以有限踢出和 tail 机制近似。第二，MiniArray 没有实现 packed B-树和查表更新，而采用重打包 bit buffer。第三，Router 在插入和删除后允许重建 trie，而不是严格维护常数时间局部更新。
+
+这些差异不会影响本文对系统功能和实现路径的描述，但会影响对性能结果的解释。因此，第 \ref{ch:exp} 章只把测试指标作为“原理实现的验证证据”，不把原型运行时间直接声称为论文理论上界的实证证明。

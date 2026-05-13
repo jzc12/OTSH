@@ -1,19 +1,44 @@
 \relax 
 \providecommand\hyper@newdestlabel[2]{}
-\pp@pagectr{footnote}{4}{8}{3}
-\@writefile{toc}{\contentsline {chapter}{\bigger \normalfont  \sffamily  \numberline {第二章}问题模型与理论基础}{3}{chapter.2}\protected@file@percent }
+\pp@pagectr{footnote}{5}{11}{6}
+\@writefile{toc}{\contentsline {chapter}{\bigger \normalfont  \sffamily  \numberline {第三章}系统设计与实现}{6}{chapter.3}\protected@file@percent }
 \@writefile{lof}{\addvspace {10.0pt}}
 \@writefile{lot}{\addvspace {10.0pt}}
-\newlabel{ch:theo_base}{{二}{3}{问题模型与理论基础}{chapter.2}{}}
-\newlabel{ch:theo_base@cref}{{[chapter][2][]二}{[1][3][]3}{}{}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {2.1}探针复杂度与球槽分配模型}{3}{section.2.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {2.2}k-kick 树分层驱逐思想}{3}{section.2.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {2.3}紧凑元数据存储核心思想}{4}{section.2.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {2.4}分层架构整体设计思想}{4}{section.2.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {2.5}商压缩的信息论最优思想}{5}{section.2.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {2.6}算法层次全景总结}{5}{section.2.6}\protected@file@percent }
-\@setckpt{chapters/02_background}{
-\setcounter{page}{6}
+\newlabel{ch:system}{{三}{6}{系统设计与实现}{chapter.3}{}}
+\newlabel{ch:system@cref}{{[chapter][3][]三}{[1][6][]6}{}{}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3.1}总体目标与分层结构}{6}{section.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3.2}地址拆分与可逆置换}{6}{section.3.2}\protected@file@percent }
+\@writefile{loa}{\contentsline {algorithm}{\numberline {1}{\ignorespaces 键到 facility 与 Router 桶的拆分（与实现一致）}}{7}{algorithm.1}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{alg:route-split}{{1}{7}{键到 facility 与 Router 桶的拆分（与实现一致）}{algorithm.1}{}}
+\newlabel{alg:route-split@cref}{{[algorithm][1][]1}{[1][6][]7}{}{}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3.3}MiniArray：按槽变长元数据}{7}{section.3.3}\protected@file@percent }
+\@writefile{loa}{\contentsline {algorithm}{\numberline {2}{\ignorespaces MiniArray 更新（逻辑层）}}{7}{algorithm.2}\protected@file@percent }
+\newlabel{alg:miniarray-update}{{2}{7}{MiniArray 更新（逻辑层）}{algorithm.2}{}}
+\newlabel{alg:miniarray-update@cref}{{[algorithm][2][]2}{[1][7][]7}{}{}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3.4}Router：桶内键到槽位映射}{7}{section.3.4}\protected@file@percent }
+\@writefile{loa}{\contentsline {algorithm}{\numberline {3}{\ignorespaces Router 查询 \texttt  {locate}（概要）}}{8}{algorithm.3}\protected@file@percent }
+\newlabel{alg:router-locate}{{3}{8}{Router 查询 \texttt {locate}（概要）}{algorithm.3}{}}
+\newlabel{alg:router-locate@cref}{{[algorithm][3][]3}{[1][7][]8}{}{}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3.5}商压缩、写入与校验}{8}{section.3.5}\protected@file@percent }
+\@writefile{loa}{\contentsline {algorithm}{\numberline {4}{\ignorespaces 从槽恢复键（与 \texttt  {recover\_key\_from\_slot} 一致）}}{8}{algorithm.4}\protected@file@percent }
+\newlabel{alg:recover-key}{{4}{8}{从槽恢复键（与 \texttt {recover\_key\_from\_slot} 一致）}{algorithm.4}{}}
+\newlabel{alg:recover-key@cref}{{[algorithm][4][]4}{[1][8][]8}{}{}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3.6}插入主路径与工程版 k-kick}{9}{section.3.6}\protected@file@percent }
+\@writefile{loa}{\contentsline {algorithm}{\numberline {5}{\ignorespaces tail 内 \texttt  {kkick\_insert}（有界探针 + 踢出链）}}{9}{algorithm.5}\protected@file@percent }
+\newlabel{alg:kkick}{{5}{9}{tail 内 \texttt {kkick\_insert}（有界探针 + 踢出链）}{algorithm.5}{}}
+\newlabel{alg:kkick@cref}{{[algorithm][5][]5}{[1][9][]9}{}{}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3.7}查询与删除}{9}{section.3.7}\protected@file@percent }
+\@writefile{loa}{\contentsline {algorithm}{\numberline {6}{\ignorespaces 查询命中判定（概要）}}{10}{algorithm.6}\protected@file@percent }
+\newlabel{alg:query}{{6}{10}{查询命中判定（概要）}{algorithm.6}{}}
+\newlabel{alg:query@cref}{{[algorithm][6][]6}{[1][9][]10}{}{}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3.8}扩缩容与双表渐进迁移}{10}{section.3.8}\protected@file@percent }
+\@writefile{loa}{\contentsline {algorithm}{\numberline {7}{\ignorespaces 单次迁移预算（一个旧 facility）}}{10}{algorithm.7}\protected@file@percent }
+\newlabel{alg:migrate}{{7}{10}{单次迁移预算（一个旧 facility）}{algorithm.7}{}}
+\newlabel{alg:migrate@cref}{{[algorithm][7][]7}{[1][10][]10}{}{}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3.9}参数与指标口径}{10}{section.3.9}\protected@file@percent }
+\@setckpt{chapters/03_system}{
+\setcounter{page}{12}
 \setcounter{equation}{0}
 \setcounter{enumi}{0}
 \setcounter{enumii}{0}
@@ -22,28 +47,28 @@
 \setcounter{footnote}{0}
 \setcounter{mpfootnote}{0}
 \setcounter{part}{0}
-\setcounter{chapter}{2}
-\setcounter{section}{6}
+\setcounter{chapter}{3}
+\setcounter{section}{9}
 \setcounter{subsection}{0}
 \setcounter{subsubsection}{0}
 \setcounter{paragraph}{0}
 \setcounter{subparagraph}{0}
 \setcounter{figure}{0}
 \setcounter{table}{0}
-\setcounter{pp@a@footnote}{4}
+\setcounter{pp@a@footnote}{5}
 \setcounter{parentequation}{0}
-\setcounter{caption@flags}{0}
+\setcounter{caption@flags}{2}
 \setcounter{continuedfloat}{0}
-\setcounter{endNonectr}{1}
+\setcounter{endNonectr}{8}
 \setcounter{currNonectr}{0}
 \setcounter{section@level}{0}
 \setcounter{Item}{0}
 \setcounter{Hfootnote}{2}
 \setcounter{Hy@AnnotLevel}{0}
-\setcounter{bookmark@seq@number}{14}
+\setcounter{bookmark@seq@number}{24}
 \setcounter{float@type}{8}
-\setcounter{algorithm}{0}
-\setcounter{ALG@line}{0}
+\setcounter{algorithm}{7}
+\setcounter{ALG@line}{9}
 \setcounter{ALG@rem}{0}
 \setcounter{ALG@nested}{0}
 \setcounter{ALG@Lnr}{2}

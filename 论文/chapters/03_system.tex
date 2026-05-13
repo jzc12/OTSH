@@ -1,0 +1,152 @@
+\chapter{系统设计与实现}
+\label{ch:system}
+
+本章围绕仓库中的《系统实现》说明展开，把各模块的职责、数据布局和主要执行路径写清楚；实现上仍是\textbf{可读、可测的原型}，与论文定理中的严格模型不等价。文中伪代码只描述分支与调用关系，省略锁、指标上报和与 MySQL 相关的细节。
+
+\section{总体目标与分层结构}
+论文构造把全局规模 \(N\)、局部规模 \(K\) 与分层 cubby 绑在一起，用受控移动换更紧凑的表示。当前代码沿用 \texttt{Facility → Cubby → Slot} 三层意象：
+\begin{itemize}
+  \item \textbf{Facility}：持有长度为 \(K\) 的 Router 数组 \texttt{D}、按 tier 存放的满 cubby 列表，以及唯一允许不满的 \textbf{tail} cubby。插入默认落在 tail；tail 满则把旧 tail 挂回 \texttt{tiers} 并新建空 tail。
+  \item \textbf{Cubby}：含商压缩槽数组 \texttt{slots}、占用列表 \texttt{occupied}、\texttt{FreeSlotTree}、以及按槽变长的 \texttt{MiniArray meta}。
+  \item \textbf{Slot}：存 quotient payload；与 \texttt{MetaEntry} 编码一起，在已知 facility、cubby 容量与槽下标的前提下恢复置换像 \(g_x\)，再经 \(\pi^{-1}\) 得到原键。
+\end{itemize}
+
+\section{地址拆分与可逆置换}
+记输入键为 \(k\)。所有操作先计算其置换像 \(g_x := \pi(k)\)。\(\pi\) 为三轮 Feistel 可逆置换，种子来自 \texttt{TableParams}。记 \(g^\ast = g_x \bmod N\)（实现中 \(N\) 为 2 的幂，故等价于取低 \(\log N\) 位），再按下式选 facility 与 Router 桶号：
+\[
+  g = g_x \wedge (N-1),\quad
+  r = \lfloor g / K\rfloor,\quad
+  b = g \bmod K.
+\]
+其中 \(r\) 为 facility 编号，\(b\) 为在该 facility 内选用的 \texttt{D[b]}。随后在 \texttt{D[b]} 上执行本地路由，得到候选 \((C,\textit{slot})\)。
+
+\begin{algorithm}[htbp]
+  \caption{键到 facility 与 Router 桶的拆分（与实现一致）}
+  \label{alg:route-split}
+  \begin{algorithmic}[1]
+    \State \(g_x \gets \pi(k)\)
+    \State \(g \gets g_x \mathbin{\mathrm{and}} (N-1)\)
+    \State \(r \gets \lfloor g / K\rfloor,\quad b \gets g \bmod K\)
+    \State \textbf{return} 在表状态 active 下编号为 \(r\) 的 facility 及其 \texttt{D[b]}
+  \end{algorithmic}
+\end{algorithm}
+
+\section{MiniArray：按槽变长元数据}
+每个 Cubby 的 \texttt{MiniArray} 保存各槽 \texttt{MetaEntry} 的编码结果。内部维护：各 entry 位长 \texttt{bitlens\_}、前缀偏移 \texttt{offsets\_}、未压缩副本 \texttt{entries\_}、以及打包后的连续位缓冲 \texttt{buf\_}。单次 \texttt{update} 会改写对应槽的位长与内容，然后调用 \texttt{repack()}：先重算所有偏移，再按位把 \texttt{entries\_} 写回 \texttt{buf\_}。
+
+\begin{algorithm}[htbp]
+  \caption{MiniArray 更新（逻辑层）}
+  \label{alg:miniarray-update}
+  \begin{algorithmic}[1]
+    \Require 槽号 \(i\)，编码比特序列 \textit{bits}，位长 \textit{bitlen}
+    \State \texttt{bitlens\_}[i] \(\gets\) \textit{bitlen}；\ \texttt{entries\_}[i] \(\gets\) \textit{bits}
+    \State \Call{recompute\_offsets}{}
+    \State 按新偏移把各 entry 逐位写入 \texttt{buf\_}
+  \end{algorithmic}
+\end{algorithm}
+
+这样实现简单、易与 \texttt{bits\_total} 指标对接，但单次更新代价与 cubby 槽数同阶，且内存除 \texttt{buf\_} 外还保留 \texttt{entries\_} 副本，因此实验里把 \texttt{bits\_total} 视作\textbf{逻辑位数趋势}，不等价于进程真实 RSS。
+
+\section{Router：桶内键到槽位映射}
+各桶内 \texttt{Router} 维护从 key 到 \((\text{Cubby}^*, \textit{slot})\) 的映射。键不直接按原值建树，而先经 \texttt{splitmix64} 得到 64 位伪随机比特串，再建 Patricia 式二叉 trie；内部结点用 \texttt{split\_bit} 区分左右子树，叶结点挂 \texttt{entry\_idx}，哈希冲突时落入 \texttt{bucket} 线性扫描。插入或删除任意键后，对 trie \textbf{整体 rebuild}，并重新估算编码长度（内部结点、普通叶、碰撞桶叶的规则不同，实现里用 \texttt{BitWriter} 走一遍树统计位数）。
+
+\begin{algorithm}[htbp]
+  \caption{Router 查询 \texttt{locate}（概要）}
+  \label{alg:router-locate}
+  \begin{algorithmic}[1]
+    \State \(\textit{bits} \gets \Call{key\_bits}{k}\)，\(\textit{steps} \gets 0\)，\(u \gets \textit{root}\)
+    \While{\(u\) 为合法结点}
+      \State \(\textit{steps} \gets \textit{steps} + 1\)
+      \If{结点为碰撞桶}
+        \For{桶中每个 entry \(e\)}
+          \If{\(e.\text{key} = k\)} \textbf{return} \((e.\text{value}, \textit{steps})\) \EndIf
+        \EndFor
+        \State \textbf{return}（未命中，\(\textit{steps}\)）
+      \Else
+        \State 按 \(\textit{bits}\) 在 \(\texttt{split\_bit}\) 处分支进入左或右子
+      \EndIf
+    \EndWhile
+  \end{algorithmic}
+\end{algorithm}
+
+查询步数上界与 trie 深度相关，实现中深度不超过约 64；指标里记为 \texttt{router\_probe\_steps} 一类字段。
+
+\section{商压缩、写入与校验}
+槽内保存 quotient：\(g_x\) 去掉低 \(\log N\) 位后的高位，记为 \texttt{quotient\_payload}。低位与路由相关信息由 \texttt{make\_meta\_entry} 根据 \(N,K\)、facility 编号、cubby 容量、槽下标及插入步数等压入 \texttt{MetaEntry}，再经 \texttt{encode\_meta\_entry} 写入 \texttt{MiniArray}。写入路径在说明文档中概括为 \texttt{put\_quotient\_slot}：同时更新 \texttt{slots[slot]} 与 \texttt{meta.update}。
+
+查询时\textbf{不信任} Router 的单一结果：在候选槽上调用校验例程（实现为 \texttt{slot\_pi\_matches}），从 meta 与 payload 调用 \texttt{reconstruct\_gx\_pi} 拼回 \(g_x\)，与当前查询的 \(\pi(\text{key})\) 比较。恢复完整键时，再调用 \(\pi^{-1}\) 得到原键，用于踢出链或迁移扫描。
+
+\begin{algorithm}[htbp]
+  \caption{从槽恢复键（与 \texttt{recover\_key\_from\_slot} 一致）}
+  \label{alg:recover-key}
+  \begin{algorithmic}[1]
+    \If{槽空 \textbf{或} meta 解码失败} \textbf{return} \(\bot\) \EndIf
+    \State \(g_x \gets \Call{reconstruct\_gx\_pi}{\textit{上下文}, \textit{payload}, \textit{MetaEntry}}\)
+    \If{\(g_x\) 非法} \textbf{return} \(\bot\) \EndIf
+    \State \textbf{return} \(\pi^{-1}(g_x)\)
+  \end{algorithmic}
+\end{algorithm}
+
+\section{插入主路径与工程版 k-kick}
+对外 \texttt{insert} 在持锁下调用 \texttt{insert\_no\_lock}：若 active 与（迁移中的）old 上 Router 均已登记该键，则返回幂等“未插入”；否则 \texttt{ensure\_tail} 保证本 facility 有未满 tail，再在 tail 上调 \texttt{kkick\_insert}。类 \texttt{KKickTree} 在工程中仅保留 \(k\) 的语义，真正行为集中在 tail 单 cubby 内的有界探针与踢出链：探针下标由 \(\pi(\text{cur\_key})\) 与步数混合后经 \texttt{splitmix64} 对容量取模得到；遇空槽则写入并更新 MiniArray、空闲槽树与 Router；遇占用槽则恢复旧键、改写路由，把被踢键作为下一轮 \texttt{cur\_key}；超过 \(k\) 步仍无空位则由 \texttt{FreeSlotTree} 任找一空槽兜底。
+
+\begin{algorithm}[htbp]
+  \caption{tail 内 \texttt{kkick\_insert}（有界探针 + 踢出链）}
+  \label{alg:kkick}
+  \begin{algorithmic}[1]
+    \Require 当前 facility、tail cubby \(C\)、待插入键 \textit{key}、facility 编号 \(r\)
+    \State \(\textit{cur} \gets \textit{key}\)，\(\textit{moved} \gets 0\)
+    \For{\(\textit{step} = 0 \ldots k\)}
+      \State \(\textit{pos} \gets \Call{probe\_slot}{\textit{cur}, C.\textit{capacity}, \textit{step}}\)
+      \If{\(C.\texttt{slots}[\textit{pos}]\) 为空}
+        \State 写入 quotient 与 meta；标记占用；Router 登记 \((\textit{cur}\to C,\textit{pos})\)
+        \State \textbf{return}（成功，\(\textit{moved} \gets \textit{step}\)）
+      \Else
+        \State \(\textit{kicked} \gets \Call{recover\_key\_from\_slot}{C,\textit{pos},r}\)；若失败则 \textbf{return} 失败
+        \State 从 Router 删除 \(\textit{kicked}\)；用 \(\textit{cur}\) 覆盖该槽并更新 meta/Router
+        \State \(\textit{cur} \gets \textit{kicked}\)，\(\textit{moved} \gets \textit{moved} + 1\)
+      \EndIf
+    \EndFor
+    \State 用空闲槽树任取空槽，写入 \(\textit{cur}\) 并维护结构；\(\textit{moved}\) 递增
+  \end{algorithmic}
+\end{algorithm}
+
+这与论文中跨多层 cubby 的 k-kick 树\textbf{不等价}，但能支撑功能正确性与 \texttt{kick\_count}（实现里对应返回的 \texttt{moved}）观测。
+
+\section{查询与删除}
+查询在 active 上按算法~\ref{alg:route-split} 定位后 \texttt{locate}，再经槽校验；未命中且存在 \texttt{old\_} 则对旧表重复一遍。删除在定位后清空槽与 meta，维护 Router 与元素计数；若删在非 tail，则从 tail 末尾搬一元素填洞并更新路由，以保持“仅 tail 可不满”的习惯。
+
+\begin{algorithm}[htbp]
+  \caption{查询命中判定（概要）}
+  \label{alg:query}
+  \begin{algorithmic}[1]
+    \State 在 active 上算 \((f,b)\)，\((v,\textit{steps}) \gets \texttt{D}[b].\Call{locate}{k}\)
+    \If{\(v\) 为空} 若有 old 表则对 old 重复；仍空则未命中 \EndIf
+    \If{\(\Call{slot\_pi\_matches}{v,\pi(k)}\)} \textbf{return} 命中 \Else\ \textbf{return} 未命中 \EndIf
+  \end{algorithmic}
+\end{algorithm}
+
+\section{扩缩容与双表渐进迁移}
+负载超过 \texttt{load\_factor}（默认 0.9）时目标容量取 \(2N\)；元素数很少时缩为 \(\max\{2,N/2\}\)（不会低于原本的N），仍取 2 的幂。触发 \texttt{start\_migration} 时：把当前 active 移入 \texttt{old\_}，再按新 \(N,K\) 建空 active；元素计数 \(n\_\) 不变。之后每次插入/删除末尾调用 \texttt{run\_migrate\_budget}，\textbf{至多}搬迁一个旧 facility：不依赖旧 Router，扫描旧 tail 与 tiers 中仍占用槽，用算法~\ref{alg:recover-key} 收集键，再按新表规则重新 \texttt{kkick\_insert}；已在新表出现的键跳过。搬完将该旧 facility 清空，推进进度直至 \texttt{old\_} 释放。
+
+\begin{algorithm}[htbp]
+  \caption{单次迁移预算（一个旧 facility）}
+  \label{alg:migrate}
+  \begin{algorithmic}[1]
+    \If{\texttt{old\_} 为空} \textbf{return} \EndIf
+    \State 扫描当前进度所指旧 facility 内所有占用槽，恢复键集合 \(K\)
+    \For{\(x \in K\)}
+      \If{新 active 上已能路由到 \(x\)} \textbf{continue} \EndIf
+      \State 按新 \(N,K\) 计算 facility，\texttt{ensure\_tail} 后 \Call{kkick\_insert}{\ldots,\, x}
+    \EndFor
+    \State 清空该旧 facility 的 tiers/tail，推进进度；若全部搬完则释放 \texttt{old\_}
+  \end{algorithmic}
+\end{algorithm}
+
+若长时间只有查询、没有更新，迁移预算不会被消耗，旧表会残留——这是实现上的已知限制。
+
+\section{参数与指标口径}
+外部参数主要在 \texttt{TableParams}：规模提示 \(n\)（推出初始 \(N=\mathrm{next\_pow2}(\cdot)\)）、\(k\)、\texttt{load\_factor}、Feistel 种子等。内部由 \texttt{choose\_K} 等推出 \(K\)、facility 数、cubby 容量上界等，与《系统实现》中的推导一致，此处不重复贴常量范围。
+
+运行与压测还会累计 \texttt{insert\_moved\_total}、\texttt{router\_steps\_total}、\texttt{meta\_bits\_total}、\texttt{resize\_start/finish} 等。需强调：\texttt{meta\_bits\_total} 多为“按次操作记录的编码规模累加”，不等价于真实堆内存；适合比较\textbf{相对趋势}，不宜直接当作严格空间最优性的数值证据。
+

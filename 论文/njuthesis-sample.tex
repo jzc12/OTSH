@@ -58,7 +58,11 @@
 % \usepackage{physics} % 物理百宝箱
 % \usepackage[version=4]{mhchem} % 绘制分子式
 % \usepackage{listings} % 展示代码
-% \usepackage{algorithm,algorithmic} % 展示算法伪代码
+\usepackage{algorithm} % 浮动体
+\usepackage{algpseudocode} % 伪代码（algorithmicx）
+\floatname{algorithm}{算法}
+\renewcommand{\algorithmicrequire}{\textbf{输入：}}
+\renewcommand{\algorithmicensure}{\textbf{输出：}}
 
 % 在导言区随意定制所需命令
 % \DeclareMathOperator{\spn}{span}
@@ -80,20 +84,16 @@
 \raggedbottom
 
 \begin{abstract}
-哈希表是计算机领域最基础的核心数据结构，近六十年来，如何在操作时间与存储空间之间取得最优权衡，一直是数据结构方向的核心研究难题。本文以《On the Optimal Time/Space Tradeoff for Hash Tables》为研究基础，对论文中的核心算法原理、工程实现细节进行梳理，并尝试简化实现论文中描述的哈希系统。
+开放寻址哈希表在工程里很常见，但在高负载下既要省内存、又要控制插入删除的扰动，并不容易。Bender 等人的论文《On the Optimal Time/Space Tradeoff for Hash Tables》给出了一条理论路线：用有限次“踢键”换更紧凑的表示。本毕业设计以该论文为主要参照，用 C++ 写了一个可运行的原型：键先经可逆置换再分区；每个 Facility 内用 Router 做局部定位；槽里做商压缩，变长恢复信息放在 MiniArray；扩缩容采用新旧两张表逐步搬迁。
 
-论文中包含三部分核心工作，第一是复现 K - kick Tree 球槽映射及分层驱逐这种核心算法；第二是设计并实现 MiniArray 与本地查询路由两类紧凑元数据结构，完成变长路由信息的低开销存储与常数时间访问；第三则是在此基础上搭建增强开放寻址哈希表整体架构，实现插入、删除、查找、动态扩容及商压缩优化机制，完整复现论文设计逻辑。
-
-最终实现常数时间查询，插入与删除时间高概率可控制，而且具备动态扩容与缩容的精简哈希表系统。经实验数据的结果来看，该系统再现了原论文当中有关时间和空间兼顾的特点，证实了这种较为理想的哈希结构在实际工程中有得以落实的可能性，进而给高性能精简哈希表的设计及其应用赋予一定的参照。
+实现上对原文有多处简化：k-kick 只在单个 tail cubby 里用有界随机探针和踢出链近似；MiniArray 与 Router 在更新时允许整段重打包或重建 trie，以保证代码清晰和指标好记。功能测试覆盖插入、查询、删除和重复插入；另有独立微基准查看热路径延迟。实验表明，在默认参数下查询延迟稳定在纳秒量级，插入阶段因重打包和扩容会慢一些。本工作重在把论文里的主要模块串起来并说明与理论的差距，而不是证明渐近最优性。
 \end{abstract}
 
 \begin{abstract*}
-Hash tables are the most fundamental core data structures in the field of computer science. For nearly sixty years, how to achieve the optimal balance between operation time and storage space has been a central research problem in the study of data structures. This paper is based on "On the Optimal Time/Space Tradeoff for Hash Tables," and it organizes the core algorithm principles and engineering implementation details presented in the paper, while attempting to simplify the implementation of the hash system described.
+This undergraduate thesis implements a simplified prototype of the hash table construction in ``On the Optimal Time/Space Tradeoff for Hash Tables.'' The code uses a reversible permutation for routing, per-facility routers to locate cubbies and slots, quotient-compressed payloads with variable-length metadata, and two-table incremental resizing.
 
-The paper contains three core contributions. The first is reproducing the key algorithm of K-kick Tree slot mapping and hierarchical eviction; the second is the design and implementation of two types of compact metadata structures, MiniArray and local query routing, which enable low-overhead storage of variable-length routing information and constant-time access; the third is building an enhanced open-addressing hash table architecture based on this, implementing insertion, deletion, lookup, dynamic resizing, and quotient compression optimization mechanisms, fully reproducing the design logic of the paper.
-
-The final implementation achieves constant-time queries, and the insertion and deletion times are highly probable to be controlled, while providing a streamlined hash table system with dynamic expansion and contraction. According to experimental results, this system replicates the time and space tradeoff characteristics described in the original paper, demonstrating that this relatively ideal hash structure can be realized in practical engineering, thus providing a reference for the design and application of high-performance streamlined hash tables.
- \end{abstract*}
+Several parts of the theory are only approximated: k-kick style behavior is reduced to a bounded kick chain inside the tail cubby, and metadata structures favor straightforward updates over the tightest asymptotics. Functional tests check correctness; a small micro-benchmark reports latency and counters. The goal is a working, observable system and a clear statement of engineering tradeoffs, not a full reproduction of every formal guarantee in the paper.
+\end{abstract*}
 
 % 生成目录
 \tableofcontents
@@ -110,10 +110,9 @@ The final implementation achieves constant-time queries, and the insertion and d
 % 建议将论文内容拆分为多个文件，按章节组织在 chapters/ 下
 \include{chapters/01_introduction}
 \include{chapters/02_background}
-\include{chapters/03_design}
-\include{chapters/04_implementation}
-\include{chapters/05_experiments}
-\include{chapters/06_conclusion}
+\include{chapters/03_system}
+\include{chapters/04_experiments}
+\include{chapters/05_conclusion}
 
 %---------------------------------------------------------------------
 %	参考文献
@@ -146,9 +145,6 @@ The final implementation achieves constant-time queries, and the insertion and d
 
 % 附录部分使用单独的字母序号
 \appendix
-
-% 补充材料（表结构、配置等）
-\include{chapters/appendix_api}
 
 % 完工
 \end{document}

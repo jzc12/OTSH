@@ -338,57 +338,6 @@
       \endverb
       \keyw{fredman1984sparse}
     \endentry
-    \entry{echarts}{online}{}{}
-      \name{author}{1}{}{%
-        {{hash=8b499b5be8914246b406785e1327dbb3}{%
-           family={{Apache Software Foundation}},
-           familyi={A\bibinitperiod}}}%
-      }
-      \name{namea}{1}{}{%
-        {{hash=8b499b5be8914246b406785e1327dbb3}{%
-           family={{Apache Software Foundation}},
-           familyi={A\bibinitperiod}}}%
-      }
-      \list{language}{1}{%
-        {english}%
-      }
-      \strng{namehash}{8b499b5be8914246b406785e1327dbb3}
-      \strng{fullhash}{8b499b5be8914246b406785e1327dbb3}
-      \strng{fullhashraw}{8b499b5be8914246b406785e1327dbb3}
-      \strng{bibnamehash}{8b499b5be8914246b406785e1327dbb3}
-      \strng{authorbibnamehash}{8b499b5be8914246b406785e1327dbb3}
-      \strng{authornamehash}{8b499b5be8914246b406785e1327dbb3}
-      \strng{authorfullhash}{8b499b5be8914246b406785e1327dbb3}
-      \strng{authorfullhashraw}{8b499b5be8914246b406785e1327dbb3}
-      \strng{nameabibnamehash}{8b499b5be8914246b406785e1327dbb3}
-      \strng{nameanamehash}{8b499b5be8914246b406785e1327dbb3}
-      \strng{nameafullhash}{8b499b5be8914246b406785e1327dbb3}
-      \strng{nameafullhashraw}{8b499b5be8914246b406785e1327dbb3}
-      \field{sortinit}{6}
-      \field{sortinithash}{b33bc299efb3c36abec520a4c896a66d}
-      \field{labelnamesource}{author}
-      \field{labeltitlesource}{title}
-      \field{langid}{english}
-      \field{languageid}{english}
-      \field{lansortorder}{4}
-      \field{title}{Apache ECharts Documentation}
-      \field{urlday}{27}
-      \field{urlmonth}{4}
-      \field{urlyear}{2026}
-      \field{usera}{EB}
-      \field{userd}{english}
-      \field{userf}{english}
-      \field{year}{2026}
-      \field{dateera}{ce}
-      \field{urldateera}{ce}
-      \verb{urlraw}
-      \verb https://echarts.apache.org/
-      \endverb
-      \verb{url}
-      \verb https://echarts.apache.org/
-      \endverb
-      \keyw{echarts}
-    \endentry
   \enddatalist
 \endrefsection
 \endinput

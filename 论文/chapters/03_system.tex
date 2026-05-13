@@ -1,15 +1,26 @@
 \chapter{系统设计与实现}
 \label{ch:system}
 
-本章围绕仓库中的《系统实现》说明展开，把各模块的职责、数据布局和主要执行路径写清楚；实现上仍是\textbf{可读、可测的原型}，与论文定理中的严格模型不等价。文中伪代码只描述分支与调用关系，省略锁、指标上报和与 MySQL 相关的细节。
+本章详细介绍系统的落地实现以及与论文理论的差距。
 
-\section{总体目标与分层结构}
-论文构造把全局规模 \(N\)、局部规模 \(K\) 与分层 cubby 绑在一起，用受控移动换更紧凑的表示。当前代码沿用 \texttt{Facility → Cubby → Slot} 三层意象：
-\begin{itemize}
-  \item \textbf{Facility}：持有长度为 \(K\) 的 Router 数组 \texttt{D}、按 tier 存放的满 cubby 列表，以及唯一允许不满的 \textbf{tail} cubby。插入默认落在 tail；tail 满则把旧 tail 挂回 \texttt{tiers} 并新建空 tail。
-  \item \textbf{Cubby}：含商压缩槽数组 \texttt{slots}、占用列表 \texttt{occupied}、\texttt{FreeSlotTree}、以及按槽变长的 \texttt{MiniArray meta}。
-  \item \textbf{Slot}：存 quotient payload；与 \texttt{MetaEntry} 编码一起，在已知 facility、cubby 容量与槽下标的前提下恢复置换像 \(g_x\)，再经 \(\pi^{-1}\) 得到原键。
-\end{itemize}
+\section{整体结构}
+可以把哈希表理解为一个连续的长度为 \(N\) 的数组，取\(K = \text{Polylog N}\), 将这个数组划分为 \(\frac{N}{K}\) 个 Facility, 每一个 Facility 中包含路由信息和多个cubby，每个cubby有不同数量的Slot，整个系统可以划分为\texttt{Facility → Cubby → Slot}。
+
+Facility包括：（1）按 tier 分组的多个 Cubby，每个设施中 tier j 的小隔间数量应大致为 \( t_j = \frac{(log^{(j)}n)^2}{(log^{(j+1)}n^2)}\), 大小为 \(s_j = \frac{K}{(log^{(j)}n)^2}\)，  tier 的数量偏离目标太远（比如少于 \(t_j/2\)或多于 \(3t_j\)），触发后台重建：；（2）tail\_tier、tail、tail\_owned，约定唯一允许非满的尾 cubby，便于插入策略集中管理；（3）D，长度为 \(K\) 的 Router 向量，即前文 D[b]。
+
+Cubby包括capacity、size 描述层级与占用；slots 为长度等于容量的 std::optional<uint64\_t> 向量，存放商压缩后的 quotient payload（\(\pi(k)\) 去掉低 \(\log N\) 位的高位）；occupied 记录当前占用槽的下标；free\_slots 为空闲槽快速结构；meta 为 MiniArray，与各槽一一对应的变长 MetaEntry 编码（路由与恢复 \(g_x\) 所需上下文，见后文）。
+
+Slot即某个 Cubby 内的整数下标 \(i\)，逻辑上由有序对 \((\texttt{slots}[i], \texttt{meta}[i])\) 表示：前者为 quotient，后者为可解码元数据。查询校验时从二者恢复 \(g_x\) 并与当前 \(\pi(k)\) 比较（见后文 slot\_pi\_matches 路径）。
+
+\begin{algorithm}[htbp]
+  \label{alg:facility-cubby-slot}
+  \begin{algorithmic}[1]
+    \State 给定 facility 编号 \(r\)、其内某 \texttt{Cubby} 指针 \(C\)、槽下标 \(i\)
+    \State \texttt{Router} 层：在 \texttt{Facility} 编号 \(r\) 的 \texttt{D}[\(b\)] 上 \Call{locate}{$k$} \(\rightarrow\) \((C^\ast, i)\)
+    \State \texttt{Cubby} 层：读 \texttt{C.slots}[\(i\)] 与 \texttt{C.meta} 中第 \(i\) 条元数据
+    \State \texttt{Slot} 层：若 \texttt{slots}[\(i\)] 有值，则结合 meta 调用 \Call{reconstruct\_gx\_pi}{} 并与 \(\pi(k)\) 校验；否则视为空槽
+  \end{algorithmic}
+\end{algorithm}
 
 \section{地址拆分与可逆置换}
 记输入键为 \(k\)。所有操作先计算其置换像 \(g_x := \pi(k)\)。\(\pi\) 为三轮 Feistel 可逆置换，种子来自 \texttt{TableParams}。记 \(g^\ast = g_x \bmod N\)（实现中 \(N\) 为 2 的幂，故等价于取低 \(\log N\) 位），再按下式选 facility 与 Router 桶号：

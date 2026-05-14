@@ -1,8 +1,11 @@
 \chapter{系统验证与实验设计}
 \label{ch:exp}
 
+\section{实验目标与评价口径}
+本章验证第三章实现的核心路径，包括功能正确性、操作延迟、累计指标和结构快照。由于当前系统是理论结构的工程原型，实验不用于替代第二章中的概率分析，也不用于证明空间最优性；实验目标限定为三个问题：插入、查询、删除和重复插入是否满足预期语义；Router、MiniArray、商压缩和工程版 k-kick 对延迟表现有何影响；运行过程中记录的移动次数、路由步数和元数据位数能否反映实现中的主要开销。
+
 \section{功能正确性测试}
-\texttt{otsh\_tests} 是系统的自动化回归入口。该程序直接调用 \texttt{HashTable}，不经过 HTTP 层，因此更适合检查核心数据结构本身。测试流程包括：
+\texttt{otsh\_tests} 是系统的自动化回归入口。该程序直接调用 \texttt{HashTable}，不经过 HTTP 层和 JSON 编解码流程，测试对象集中在哈希表核心结构。测试流程包括：
 \begin{itemize}
   \item 初始化哈希表，并检查返回状态与表状态中的 \(N\)、Facility 数量是否有效；
   \item 使用固定随机种子生成唯一键集合，执行批量插入，要求每个新键返回 \texttt{inserted=true}；
@@ -12,22 +15,22 @@
   \item 对剩余键重复插入，要求返回 \texttt{inserted=false}，验证幂等语义。
 \end{itemize}
 
-测试程序结束时输出一行 JSON，其中包含 \texttt{all\_passed}、通过和失败数量、每个 case 的名称与结果，以及 \texttt{ops\_insert}、\texttt{ops\_query}、\texttt{ops\_delete}、\texttt{insert\_moved\_total}、\texttt{delete\_moved\_total} 等指标摘要。若 MySQL 可用，结果追加到 \texttt{otsh\_test\_session\_log}；否则写入本地测试日志。这样，功能验证既能由进程退出码判断，也能留下可审计记录。
+测试结束时输出单行 JSON，字段包括 \texttt{all\_passed}、通过和失败数量、各测试用例名称与结果，以及 \texttt{ops\_insert}、\texttt{ops\_query}、\texttt{ops\_delete}、\texttt{insert\_moved\_total}、\texttt{delete\_moved\_total} 等摘要指标。结果写入本地日志。
 
 \section{性能基准}
-\texttt{otsh\_perf} 用于隔离算法热路径。它不链接 MySQL，也不经过 HTTP JSON 编解码，主要测量内存中的插入、顺序命中查询、随机命中查询、删除和混合查询。程序支持命令行参数 \texttt{n\_insert}、\texttt{n\_rand\_queries}、\texttt{table\_n\_hint}，并通过环境变量 \texttt{OTSH\_SEED} 控制随机种子。
+\texttt{otsh\_perf} 用于测量内存态哈希表路径。该程序不链接 MySQL，也不经过 HTTP JSON 编解码，避免存储层和接口层影响插入、查询、删除本身的耗时。程序支持命令行参数 \texttt{n\_insert}、\texttt{n\_rand\_queries}、\texttt{table\_n\_hint}，并通过环境变量 \texttt{OTSH\_SEED} 固定随机种子。
 
-每个阶段记录操作数、墙钟时间、吞吐、平均延迟与分位数（含 p50、p95、p99）；人类可读结果输出到 \texttt{stderr}，单行 JSON 输出到 \texttt{stdout}，便于脚本收集到 \texttt{perf/results/}。表~\ref{tab:otsh-perf-macro} 给出一组默认参数下的微基准摘要（表中只列平均延迟与 p50），参数为 \texttt{n\_insert}${}=5\times10^4$、\texttt{n\_rand\_queries}${}=2\times10^5$、\texttt{table\_n\_hint}${}=2\times10^5$、\texttt{OTSH\_SEED}${}=1$，在本机一次跑出的结果，换机器会有偏差。阅读时主要看相对大小：查询是否明显快于插入、混合查询是否接近纯命中查询等。
+每个阶段记录操作数、吞吐、平均延迟与 p50 分位数。结果输出到 \texttt{stderr}，单行 JSON 输出到 \texttt{stdout}，便于脚本收集到 \texttt{perf/results/}。本文实验参数为 \texttt{n\_insert}${}=5\times10^4$、\texttt{n\_rand\_queries}${}=2\times10^5$、\texttt{table\_n\_hint}${}=2\times10^5$、\texttt{OTSH\_SEED}${}=1$。
 
 \begin{table}[htbp]
   \centering
-  \caption{\texttt{otsh\_perf} 微基准各阶段耗时与延迟摘要}
+  \caption{\texttt{otsh\_perf} 微基准真实运行结果}
   \label{tab:otsh-perf-macro}
-  \begin{tabular}{lrrrrr}
+  \begin{tabular}{lrrrrrr}
     \toprule
-    阶段 & 操作数 & 墙钟时间/ms & 吞吐/s$^{-1}$ & 平均延迟/ns & p50/ns \\
+    阶段 & 操作数 & 总耗时/ms & 吞吐/s$^{-1}$ & 平均/ns & p50/ns \\
     \midrule
-    初始化 & --- & 35.44 & --- & --- & --- \\
+    初始化 & --- & 35.437 & --- & --- & --- \\
     插入 & 50000 & 1779.45 & 28099 & 35455 & 10700 \\
     顺序查询（全命中） & 50000 & 146.23 & 341916 & 2802 & 2700 \\
     随机查询（命中） & 200000 & 637.76 & 313600 & 2981 & 2900 \\
@@ -37,13 +40,41 @@
   \end{tabular}
 \end{table}
 
+表中数据与第三章的路径分析一致。插入阶段平均延迟为 35455 ns，p50 为 10700 ns，二者差距较大，说明延迟分布右偏，存在少数较慢路径；整体仍显著高于查询路径。原因在于插入除置换、Router 定位和槽位写入外，还会维护 MiniArray、Router、FreeSlotTree，并可能发生有限踢出或扩缩容迁移。顺序命中查询与随机命中查询的平均延迟分别为 2802 ns 和 2981 ns，p50 与平均接近，说明查询主要受局部 Router 查找和槽位校验影响。删除阶段平均延迟为 6372 ns，高于查询但低于插入，符合其需要清理槽位、维护 Router 并可能执行 tail 回填的实现路径。混合查询平均延迟为 2242 ns，未出现全表扫描带来的明显抬升。
+
+同一次运行结束后，程序输出哈希表状态和累计指标，结果见表~\ref{tab:otsh-perf-metrics}。此时系统保留 25000 个元素，active 表规模为 65536，\(K=256\)，Facility 数量为 256。插入移动次数累计为 46941，最大单次移动次数为 5；删除移动次数累计为 376，最大单次移动次数为 1。该结果表明，当前工程版 k-kick 插入确实发生了踢出，但单次移动次数在本次运行中保持较小。Router 访问步数最大值为 5，说明在该参数和随机种子下，局部 Patricia 路由未形成较深路径。
+
+\begin{table}[htbp]
+  \centering
+  \caption{\texttt{otsh\_perf} 运行结束后的状态与累计指标}
+  \label{tab:otsh-perf-metrics}
+  \begin{tabular}{lr}
+    \toprule
+    指标 & 数值 \\
+    \midrule
+    当前元素数 \(n\) & 25000 \\
+    表规模 \(N\) & 65536 \\
+    Router 桶数 \(K\) & 256 \\
+    Facility 数量 & 256 \\
+    \texttt{insert\_moved\_total} & 46941 \\
+    \texttt{insert\_moved\_max} & 5 \\
+    \texttt{delete\_moved\_total} & 376 \\
+    \texttt{delete\_moved\_max} & 1 \\
+    \texttt{router\_steps\_total} & 642741 \\
+    \texttt{router\_steps\_max} & 5 \\
+    \texttt{meta\_bits\_total} & 633735932 \\
+    \texttt{meta\_bits\_max} & 16365 \\
+    \texttt{resize\_start}/\texttt{resize\_finish} & 8/8 \\
+    平均上报元数据位数/插入 & 12674.72 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
 \section{指标与数据库观测}
 操作级指标以 \texttt{SqlMetricRow} 形式产生，核心字段包括 \texttt{operation\_type}、\texttt{probe\_count}、\texttt{kick\_count}、\texttt{latency\_ns}、\texttt{cubby\_tier} 和 \texttt{snapshot\_id}。存储层先把指标放入内存缓冲，再批量写入 \texttt{otsh\_op\_metrics}，避免高频操作逐条落库造成过大扰动。
 
-这些字段对应第 \ref{ch:bg} 章中的理论量。\texttt{probe\_count} 可用于观察路由成本，\texttt{kick\_count} 可用于观察更新中的交换成本，\texttt{latency\_ns} 用于描述工程延迟，\texttt{cubby\_tier} 可用于区分不同层级的行为差异。典型查询包括按操作类型统计平均和分位延迟、按 tier 统计平均踢出次数、按快照比较不同参数下的路由步数。
+这些字段与第 \ref{ch:theo_base} 章中的探针复杂度和交换成本相对应。\texttt{probe\_count} 记录局部 Router 的访问步数，\texttt{kick\_count} 记录更新过程中的移动次数，\texttt{latency\_ns} 记录工程延迟，\texttt{cubby\_tier} 用于区分不同层级 Cubby 上的操作行为。后续分析可以按操作类型统计延迟分位数，也可以按 tier 或快照比较路由步数和移动次数。
 
-结构快照由 \texttt{HashTable::visit\_structure} 驱动。系统把 Facility、Cubby、Slot 和 tier 聚合写入对应表。 \texttt{facility} 记录 tail 所在 cubby，\texttt{cubby} 记录 tier、capacity、size 和 \texttt{is\_tail}，\texttt{slot\_snapshot} 记录槽位是否占用及 \(\pi(x)\) 形式的 key hash，\texttt{tier\_stat} 记录每个 Facility 在各 tier 上的 cubby 数量。这些表可用于检查 tail 是否唯一、非 tail cubby 是否接近满载、tier 数量是否偏离目标分布。
+结构快照由 \texttt{HashTable::visit\_structure} 驱动。系统将 Facility、Cubby、Slot 和 tier 聚合信息写入相应数据表：\texttt{facility} 记录 tail 所在 Cubby，\texttt{cubby} 记录 tier、capacity、size 和 \texttt{is\_tail}，\texttt{slot\_snapshot} 记录槽位是否占用及 \(\pi(x)\) 形式的 key hash，\texttt{tier\_stat} 记录每个 Facility 在各 tier 上的 Cubby 数量。这些表可用于检查 tail 是否唯一、非 tail Cubby 是否接近满载、tier 数量是否偏离目标分布。
 
-
-\section{可视化与结果呈现}
-TODO
+指标写入属于观测路径，不属于哈希表核心算法。性能基准程序绕开 MySQL 和 HTTP 层，是为了减少观测系统对热路径延迟的干扰；数据库指标更适合用于实验后分析、结构审计和可视化展示。

@@ -1,7 +1,5 @@
 // OTSH 性能基准：插入 / 查询 / 删除延迟 + Metrics 汇总。
 // 用法: otsh_perf [n_insert] [n_rand_queries] [table_n_hint]
-// 环境变量: OTSH_SEED (uint64, 默认 1)
-// 输出: 人类可读 → stderr；单行 JSON → stdout（便于 perf/results/ 收集）
 
 #include "config.h"
 #include "hash.h"
@@ -61,7 +59,7 @@ uint64_t mean_u64(const std::vector<uint64_t> &v) {
 struct PhaseStat {
   std::string name;
   uint64_t ops = 0;
-  uint64_t wall_ns = 0;
+  uint64_t elapsed_ns = 0;
   std::vector<uint64_t> lat_ns;
 };
 
@@ -71,11 +69,11 @@ void summarize_phase(std::ostream &out, PhaseStat &ph) {
   const uint64_t p95 = percentile_sorted(ph.lat_ns, 0.95);
   const uint64_t p99 = percentile_sorted(ph.lat_ns, 0.99);
   const uint64_t avg = mean_u64(ph.lat_ns);
-  const double sec = static_cast<double>(ph.wall_ns) * 1e-9;
+  const double sec = static_cast<double>(ph.elapsed_ns) * 1e-9;
   const double qps = sec > 0 ? static_cast<double>(ph.ops) / sec : 0;
   out << std::left << std::setw(24) << ph.name << " ops=" << ph.ops
-      << " wall_ms=" << std::fixed << std::setprecision(2)
-      << (ph.wall_ns / 1e6) << " qps=" << std::setprecision(0) << qps
+      << " elapsed_ms=" << std::fixed << std::setprecision(2)
+      << (ph.elapsed_ns / 1e6) << " qps=" << std::setprecision(0) << qps
       << "  lat_ns avg=" << avg << " p50=" << p50 << " p95=" << p95
       << " p99=" << p99 << '\n';
 }
@@ -84,8 +82,8 @@ void json_phase_append(std::ostringstream &j, const char *name,
                        const PhaseStat &ph) {
   const auto &v = ph.lat_ns;
   j << ",\"" << name << "\":{"
-    << "\"ops\":" << ph.ops << ",\"wall_ms\":" << std::fixed
-    << std::setprecision(3) << (ph.wall_ns / 1e6) << ",\"lat_ns_avg\":"
+    << "\"ops\":" << ph.ops << ",\"elapsed_ms\":" << std::fixed
+    << std::setprecision(3) << (ph.elapsed_ns / 1e6) << ",\"lat_ns_avg\":"
     << mean_u64(v) << ",\"p50\":" << percentile_sorted(v, 0.50) << ",\"p95\":"
     << percentile_sorted(v, 0.95) << ",\"p99\":"
     << percentile_sorted(v, 0.99) << '}';
@@ -127,7 +125,7 @@ int main(int argc, char **argv) {
     return 1;
   }
   const auto t_init1 = clockk::now();
-  std::cerr << "init wall_ms=" << std::fixed << std::setprecision(3)
+  std::cerr << "init elapsed_ms=" << std::fixed << std::setprecision(3)
             << dur_ns(t_init0, t_init1) / 1e6 << "\n\n";
 
   std::mt19937_64 rng(static_cast<uint64_t>(seed));
@@ -157,7 +155,7 @@ int main(int argc, char **argv) {
       }
       ++ph_ins.ops;
     }
-    ph_ins.wall_ns = dur_ns(w0, clockk::now());
+    ph_ins.elapsed_ns = dur_ns(w0, clockk::now());
   }
   summarize_phase(std::cerr, ph_ins);
 
@@ -177,7 +175,7 @@ int main(int argc, char **argv) {
       }
       ++ph_q1.ops;
     }
-    ph_q1.wall_ns = dur_ns(w0, clockk::now());
+    ph_q1.elapsed_ns = dur_ns(w0, clockk::now());
   }
   summarize_phase(std::cerr, ph_q1);
 
@@ -199,7 +197,7 @@ int main(int argc, char **argv) {
       }
       ++ph_qr.ops;
     }
-    ph_qr.wall_ns = dur_ns(w0, clockk::now());
+    ph_qr.elapsed_ns = dur_ns(w0, clockk::now());
   }
   summarize_phase(std::cerr, ph_qr);
 
@@ -233,7 +231,7 @@ int main(int argc, char **argv) {
       }
       ++ph_del.ops;
     }
-    ph_del.wall_ns = dur_ns(w0, clockk::now());
+    ph_del.elapsed_ns = dur_ns(w0, clockk::now());
   }
   summarize_phase(std::cerr, ph_del);
 
@@ -258,7 +256,7 @@ int main(int argc, char **argv) {
       global_metrics().on_ht_query_ns(ns);
       ++ph_qm.ops;
     }
-    ph_qm.wall_ns = dur_ns(w0, clockk::now());
+    ph_qm.elapsed_ns = dur_ns(w0, clockk::now());
   }
   summarize_phase(std::cerr, ph_qm);
 
@@ -299,11 +297,11 @@ int main(int argc, char **argv) {
     << ",\"table_n_hint\":" << table_n_hint << ",\"seed\":" << seed
     << ",\"state\":{\"n\":" << st.n << ",\"N\":" << st.N << ",\"K\":" << st.K
     << ",\"facilities\":" << st.facilities << '}'
-    << ",\"wall_ms\":{\"init\":" << std::fixed << std::setprecision(3)
+    << ",\"elapsed_ms\":{\"init\":" << std::fixed << std::setprecision(3)
     << (dur_ns(t_init0, t_init1) / 1e6) << ",\"insert_all\":"
-    << (ph_ins.wall_ns / 1e6) << ",\"query_seq\":" << (ph_q1.wall_ns / 1e6)
-    << ",\"query_rand\":" << (ph_qr.wall_ns / 1e6) << ",\"delete_half\":"
-    << (ph_del.wall_ns / 1e6) << ",\"query_mixed\":" << (ph_qm.wall_ns / 1e6)
+    << (ph_ins.elapsed_ns / 1e6) << ",\"query_seq\":" << (ph_q1.elapsed_ns / 1e6)
+    << ",\"query_rand\":" << (ph_qr.elapsed_ns / 1e6) << ",\"delete_half\":"
+    << (ph_del.elapsed_ns / 1e6) << ",\"query_mixed\":" << (ph_qm.elapsed_ns / 1e6)
     << '}';
 
   json_phase_append(j, "insert", ph_ins);

@@ -57,7 +57,7 @@
 % \usepackage{siunitx} % 标准单位符号
 % \usepackage{physics} % 物理百宝箱
 % \usepackage[version=4]{mhchem} % 绘制分子式
-% \usepackage{listings} % 展示代码
+\usepackage{listings} % 展示代码
 \usepackage{algorithm} % 浮动体
 \usepackage{algpseudocode} % 伪代码（algorithmicx）
 \floatname{algorithm}{算法}
@@ -84,15 +84,17 @@
 \raggedbottom
 
 \begin{abstract}
-开放寻址哈希表在工程里很常见，但在高负载下既要省内存、又要控制插入删除的扰动，并不容易。Bender 等人的论文《On the Optimal Time/Space Tradeoff for Hash Tables》给出了一条理论路线：用有限次“踢键”换更紧凑的表示。本毕业设计以该论文为主要参照，用 C++ 写了一个可运行的原型：键先经可逆置换再分区；每个 Facility 内用 Router 做局部定位；槽里做商压缩，变长恢复信息放在 MiniArray；扩缩容采用新旧两张表逐步搬迁。
 
-实现上对原文有多处简化：k-kick 只在单个 tail cubby 里用有界随机探针和踢出链近似；MiniArray 与 Router 在更新时允许整段重打包或重建 trie，以保证代码清晰和指标好记。功能测试覆盖插入、查询、删除和重复插入；另有独立微基准查看热路径延迟。实验表明，在默认参数下查询延迟稳定在纳秒量级，插入阶段因重打包和扩容会慢一些。本工作重在把论文里的主要模块串起来并说明与理论的差距，而不是证明渐近最优性。
+本论文以《OntheOptimalTime/SpaceTradeoffforHashTables》为研究方向，系统整理文中给出的理论算法及核心思想，然后加以简化并落实到实际当中，从宏观架构来讲，文章创建起 Facility - Cubby - Slot 这样的三层存储体系，从而达成高效地组织和运作哈希表的目的；就微观机制而言，融合了可逆哈希函数，局部查询路径，商压缩，K - Kick 规则，多层级（multi - tier）Cubby 以及双表渐进式扩缩容迁移等主要技术，虽然有些执行过程采取了简化办法，没有完全按照最初理论模型应有的严谨程度来操作，但是整个哈希系统的功能还是齐全的，逻辑上也是连贯的，可以稳定运行。 落地的哈希系统包含初始化，插入，删除，查询，扩容以及性能指标验证等完整的操作，实验结果表明，该系统可以稳定执行各类动态操作，其路由访问步数，元素被踢出的移动次数以及元数据编码位数等关键指标均处于可控制范围内，能够精准再现原始理论架构的核心逻辑，而且，本文明确了工程简化达成与严格理论模型之间的差异界限，给类似紧凑哈希结构的工程化重现及其在实际场景中的应用赋予了有价值的参考。
+
 \end{abstract}
 
 \begin{abstract*}
-This undergraduate thesis implements a simplified prototype of the hash table construction in ``On the Optimal Time/Space Tradeoff for Hash Tables.'' The code uses a reversible permutation for routing, per-facility routers to locate cubbies and slots, quotient-compressed payloads with variable-length metadata, and two-table incremental resizing.
 
-Several parts of the theory are only approximated: k-kick style behavior is reduced to a bounded kick chain inside the tail cubby, and metadata structures favor straightforward updates over the tightest asymptotics. Functional tests check correctness; a small micro-benchmark reports latency and counters. The goal is a working, observable system and a clear statement of engineering tradeoffs, not a full reproduction of every formal guarantee in the paper.
+This thesis is built on the study of the paper \textit{On the Optimal Time/Space Tradeoff for Hash Tables}. It does an analysis on the theoretical algorithms and main ideas in the paper, and then tries to make them work in real engineering by using a more simple and practical way. From the overall structure point of view, a three-layer storage model made up of Facility, Cubby, and Slot is designed, which helps to manage the hash table in a more organized way. At the implementation side, the system uses many key techniques like reversible hash functions, localized query paths, quotient compression, the K-Kick rule, multi-tier Cubby organization, and incremental dual-table resizing and migration. Even though some parts are simplified and do not fully follow the strict assumptions in the original theory, the system still keeps the main framework and runs with stable logic.
+
+The built hash system can support all basic functions such as initialization, insertion, deletion, lookup, dynamic resizing, and performance testing. The experiment results show that it can handle different dynamic operations stably, and important indicators like routing probe counts, kick displacement frequency, and metadata encoding overhead are kept in acceptable levels. The implementation is able to get the core behavior of the original theoretical design in a reasonable way. Also, this work makes a discussion about the differences between the engineering simplifications used here and the pure theoretical model, which can be helpful for the practical rebuilding and use of compact hash table structures. There are still some gaps, but the function of it is clear and useful.
+
 \end{abstract*}
 
 % 生成目录
@@ -126,8 +128,7 @@ Several parts of the theory are only approximated: k-kick style behavior is redu
 %---------------------------------------------------------------------
 
 \begin{acknowledgement}
-  行文至此，落笔为终。感谢遇到的导师、感谢身边的每一个同学、感谢遇到的每一个人。凡是过往，皆为序章，很喜欢看到的一句话，人生如棋，落子无悔。
-  愿我们跃入人海，各自灿烂。
+  行文至此，落笔为终。感谢遇到的导师、感谢身边的每一个同学、感谢遇到的每一个人。凡是过往，皆为序章，很喜欢看到的一句话，人生如棋，落子无悔。愿我们跃入人海，各自灿烂。
 \end{acknowledgement}
 
 %---------------------------------------------------------------------

@@ -1,0 +1,21 @@
+=== OTSH perf bench ===
+n_insert=100000 n_rand_queries=400000 table_n_hint=262144 seed=1
+
+init elapsed_ms=33.568
+
+insert                   ops=100000 elapsed_ms=3840.92 qps=26035  lat_ns avg=38267 p50=12500 p95=53600 p99=124600
+query_all(seq)           ops=100000 elapsed_ms=350.77 qps=285084  lat_ns avg=3386 p50=3400 p95=4600 p99=5300
+query_random(hit)        ops=400000 elapsed_ms=1612.49 qps=248063  lat_ns avg=3765 p50=3700 p95=4900 p99=5800
+delete_half              ops=50000 elapsed_ms=380.76 qps=131317  lat_ns avg=7489 p50=7100 p95=11500 p99=21200
+query_mixed(hit+miss)    ops=200000 elapsed_ms=624.46 qps=320275  lat_ns avg=2749 p50=3200 p95=4700 p99=5600
+
+--- HashTable state ---
+n=50000 N=131072 K=256 facilities=512
+
+--- Metrics snapshot (cumulative) ---
+insert_moved_total=93652 insert_moved_max=5
+delete_moved_total=769 delete_moved_max=1
+router_steps_total=1288969 router_steps_max=6
+meta_bits_total=1458201273 meta_bits_max=18965
+rebuild_down=0 rebuild_up=0 resize_start=9 resize_finish=9
+avg_meta_bits_per_insert_reported=14582.01

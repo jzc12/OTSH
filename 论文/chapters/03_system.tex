@@ -66,7 +66,7 @@ Cubby 包括tiered(是第几层) 、容量、当前元素数、槽位数组、�
 
 FreeSlotTree 用线性化的线段树去记录 Cubby 内各区间空闲槽数量，初始化的时候，叶层宽度选取不低于 Cubby 容量的最小 2 的幂，合法槽位的叶子计数设为 1。调用 find\_free 时，系统从根节点往下找还有空闲计数的子区间，最后返回一个可用槽位；调用 mark\_used 或者 mark\_free 后面就顺着父节点去更新计数，这个结构没有做到理论上的低深度压缩位图效果，而是用比较直观的线段树形式来做守护工作，这样就能在插入，删除以及重建的时候检查空闲状况。
 
-Facility中存在两种不同的层次概念，需要加以区分，其一为 k - kick，这是在一个cubby内部的分层树状管理；其二为tiered，这是用来管理扩缩容实现的分层次cubbies,是论文理论的混淆点与核心难点。
+Facility中存在两种不同的层次概念，需要加以区分，其一为 k-kick，这是在一个cubby内部的分层树状管理；其二为tiered，这是用来管理扩缩容实现的分层次cubbies,是论文理论的混淆点与核心难点。
 
 \subsection{tail 管理}
 
@@ -346,7 +346,7 @@ payload 以及 MetaEntry 都依靠表规模，局部桶数，Facility 编号和 
 
 外层函数加锁后调用 insert\_no\_lock，成功插入后检查扩缩容，随后执行一个后台重建预算和一个迁移预算。真正写入发生在 kkick\_insert 中。
 
-插入流程如下：先算出 \(g_x = \pi(x)\)，找到 active 表里对应的 Facility 和 Router 桶；如果 active 表已有此键，则直接返回 inserted=false。若是处于迁移窗口，则还要查看 old 表，防止同一个键在迁移过程中被重复写入，确定键不存在之后，系统会调用 ensure\_tail 来准备好 tail Cubby，并在其中执行 k - kick 操作。
+插入流程如下：先算出 \(g_x = \pi(x)\)，找到 active 表里对应的 Facility 和 Router 桶；如果 active 表已有此键，则直接返回 inserted=false。若是处于迁移窗口，则还要查看 old 表，防止同一个键在迁移过程中被重复写入，确定键不存在之后，系统会调用 ensure\_tail 来准备好 tail Cubby，并在其中执行 k-kick 操作。
 
 当前 k-kick 是单 Cubby 内的有界踢出链。探针位置由
 \[

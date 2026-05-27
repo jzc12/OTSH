@@ -94,8 +94,10 @@
   }
 \cs_new_protected:Npn \__nju_decl_sign:
   {
-    \clist_map_inline:nn { origsign, id, date }
-      { \tex_par:D \__nju_name:n {##1} ： \hbox_to_wd:nn { 6 em } { } }
+    \tex_par:D \__nju_name:n { origsign } ： \__nju_info:n { author }
+    \tex_par:D \__nju_name:n { id       } ： \__nju_info:n { id }
+    \tex_par:D \__nju_name:n { date     } ： \__nju_info:n { submitdate }
+  
   }
 \__nju_declare_page:nn { cover-u }
   {

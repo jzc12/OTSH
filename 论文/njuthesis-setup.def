@@ -26,11 +26,11 @@
     % 作者英文姓名
     % 一般使用拼音
     %
-    keywords = {哈希表；时间空间权衡；探针复杂度；增强开放寻址；k-kick tree；动态扩容},
+    keywords = {哈希表；时间空间权衡；探测复杂度；增强开放寻址；k-kick 树；动态扩容},
     % 中文关键词列表
     % 使用英文半角逗号(,)分隔
     %
-    keywords* = {hash tables, time--space tradeoff, probe complexity, enhanced open addressing, k-kick tree, dynamic expansion},
+    keywords* = {hash tables, time--space tradeoff, the Probe-Complexity problem, enhanced open addressing, k-kick tree, dynamic expansion},
     % 英文关键词
     % 使用英文半角逗号(,)分隔
     %
@@ -63,7 +63,7 @@
     % 第二导师全称
     % 如果确实没有第二导师，不填写即可
     %
-    submit-date = {2026-05-20},
+    submit-date = {2026-05-30},
     % 提交日期
     % 格式为 yyyy-mm-dd
     % 不填就是编译当天日期
@@ -158,16 +158,16 @@
     % path = {{./figure/}{./image/}},
     % 图片搜索路径
     %
-    nju-emblem = {nju-emblem},
-    nju-name = {nju-name},
+    % nju-emblem = {nju-emblem},
+    % nju-name = {nju-name},
     % 校徽和校名图片路径
     % 建议使用 PDF 格式的矢量图
     % 使用外置图片有助于减少编译时间
     % 空置时会自动使用 njuvisual 宏包绘制
     %
-    % nju-emblem = {nju-emblem-purple},
-    % nju-name = {nju-name-purple},
-    % 替换为紫色版本
+    nju-emblem = {nju-emblem-purple},
+    nju-name = {nju-name-purple},
+    % 替换为紫色版本（外置 PDF 若编译报错，可改用下方 njusetformat 绘制）
     % 这个选项只能填写一次
     % 切换时要注释掉上方的黑色版本
 }

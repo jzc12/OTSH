@@ -1,0 +1,510 @@
+第三章 系统设计与实现
+本章围绕系统的实际实现细节展开，与第二章的理论描述相比，讨论的是当
+前实现真实采用的状态组织、操作路径与落地的替代方式。
+3.1 总体架构与数据路径
+系统所创建的哈希表从逻辑上看是长度为𝑁 的开放寻址表，而且𝑁 永远是
+2的幂次，其主要包含五种操作，分别是初始化，插入，查询，删除以及渐进迁
+移。在初始化阶段要生成𝑁 和𝐾，并形成Facility结构；插入阶段首先由Router
+减小候选范围，然后在tailCubby中执行有界kick；查询阶段借助“Router候选
++ 商压缩恢复校验”来执行命中判断；删除阶段则要释放槽位并执行必要的回
+填，这些操作过程会记录router_probe_steps1、kick_count2和cubby_tier3，从而可
+以在后续的实验统计使用。
+每张表用TableState4来表示，它包含表规模𝑁，局部桶数𝐾 以及Facility数
+组，其中 Facility 负责管理多 tiered cubbies，一个唯一的 tail Cubby 和长度为 𝐾
+的Router数组，而Cubby则是实际的存储容器，Slot是Cubby内的数组槽位。
+查询的主路径大致如下，如算法1所示：首先计算𝑔 = 𝜋(𝑥)，按照𝑔 的低
+𝑥 𝑥
+log𝑁 位找到 Facility 和 Router ；Router 给出候选 (Cubby∗,slot) 之后，接着读取
+′
+槽内的 payload 和 MiniArray 元数据，重新创建 𝜋(𝑥 ) ，并与查询键的置换值做
+对比。
+1 单次操作中Router前缀树遍历的步数。
+2 单次插入或删除中k-kick链发生的槽位搬移次数。
+3 本次操作所涉Cubby的tiered层级编号。
+4 哈希表运行时状态，保存元素个数、表规模𝑁、Router桶数𝐾及Facility数组等。
+8
+算法1查询过程
+1:
+输入查询键𝑥
+2: 计算𝑔 ← 𝜋(𝑥)
+𝑥
+3: 𝑔 低位拆分出Facility编号𝑟和Router桶号𝑏
+𝑥
+4:
+在表中facilities[r].D[b]调用locate(x)
+5: if Router返回候选位置(𝐶,𝑖) then
+6:
+读取C.slots[i]和C.meta[i]
+7:
+重建候选槽位对应的𝑔′
+𝑥
+′
+8: 若𝑔 = 𝑔 ，返回命中
+𝑥 𝑥
+9: endif
+返回未命中
+10:
+3.2 参数产生与地址拆分
+参数包括𝑛、k-kick参数𝑘、负载因子load_factor和Feistel哈希种子1。初始
+化时，代码首先将表规模设置为
+𝑁 = next_pow2(max{2,𝑛})2,
+因此 𝑁 始终为 2 的幂，且当 𝑛 > 1 时满足 𝑁/2 < 𝑛 ⩽ 𝑁。随后 choose_K3根据
+𝑁 生成𝐾：先取近似(log 𝑁)2 的规模，再限制在[64,4096]和𝐾 ⩽ 𝑁 的范围内，
+2
+最后向下取2的幂4。Facility数量为 𝑁。
+𝐾
+可逆置换由三轮Feistel实现,对任意键𝑥，系统先计算𝑔 = 𝜋(𝑥)，再取其低
+𝑥
+log𝑁 位：
+𝑔 = 𝑔 and(𝑁 −1).
+𝑥
+由于𝑁 是2的幂，上式等价于𝑔 mod 𝑁。随后按照
+𝑥
+𝑟 = ⌊𝑔/𝐾⌋, 𝑏 = 𝑔 mod 𝐾.
+这样获得Facility编号𝑟和Router桶号𝑏,如算法2所示，当𝑁、𝐾、Facility编号
+或者Cubby容量发生改变时，既有的payload与MetaEntry的恢复上下文就会随
+1 Feistel网络（将输入分为左右两半、多轮轮函数混合的可逆构造）的随机种子，决定可逆置换𝜋(𝑥)的具
+体形式。
+2 将整数向上取为不小于它的最小2的幂，用作表规模𝑁。
+3 按𝑁 计算Router桶数𝐾，近似为(log 𝑁)2并限制在[64,4096]内，再向下取2的幂且满足𝐾 ⩽𝑁。
+2
+4 理论结构要求𝐾为多对数规模，即𝐾 =𝑂(polylog𝑁)。当前实现额外要求𝐾为2的幂，以便地址拆分
+与位运算保持一致。
+9
+之改变，所以扩缩容迁移不能简单地复制旧槽位的内容。
+算法2键映射到Facility及Router桶的流程
+1:
+输入键𝑥
+2: 𝑔 ← 𝜋(𝑥)
+𝑥
+3: 𝑔 ← 𝑔 and(𝑁 −1)
+𝑥
+4: 𝑟 ← ⌊𝑔/𝐾⌋
+5: 𝑏 ← 𝑔 mod 𝐾
+6:
+返回第𝑟个Facility及其中的RouterD[b]
+3.3 Facility、Cubby 与空闲槽结构
+Facility 包括四部分：按 tiered 分组的 Cubbies 集合、tail 及其所有权信息、
+tiered上界参数、长度为𝐾 的Router数组。每个Router桶维护“键到候选槽位”
+的局部映射；每个 Facility 在任一时刻只保留一个 tail，这样就能保证系统装填
+因子能到达1。
+Cubby包括tiered(是第几层)、容量、当前元素数、槽位数组、占用槽索引、
+空闲槽检索结构和变长元数据数组。槽位只保存商压缩后的 payload，不直接保
+存完整键；完整恢复依赖MetaEntry、槽位下标与Facility上下文。占用槽索引用
+于迁移扫描和删除回填，避免在空槽上做无效遍历。
+FreeSlotTree1用线性化的线段树去记录Cubby内各区间空闲槽数量，初始化
+的时候，叶层宽度选取不低于 Cubby 容量的最小 2 的幂，合法槽位的叶子计数
+设为 1。调用 find_free2时，系统从根节点往下找还有空闲计数的子区间，最后
+返回一个可用槽位；调用mark_used3或者mark_free4后面就顺着父节点去更新计
+数，这个结构没有做到理论上的低深度压缩位图效果，而是用比较直观的线段树
+形式来做守护工作，这样就能在插入，删除以及重建的时候检查空闲状况。
+Facility 中存在两种不同的层次概念，需要加以区分，其一为 k-kick5，这是
+在一个cubby内部的分层树状管理；其二为tiered6，这是用来管理扩缩容实现的
+1 Cubby内基于线段树维护各区间空闲槽计数的结构，用于快速查找空槽并更新占用状态。
+2 在Cubby的空闲槽线段树中自根向下查找，返回一个可用槽位下标。
+3 将指定槽位标记为已占用，并自底向上更新线段树各区间空闲计数。
+4 将指定槽位标记为空闲，并更新线段树计数。
+5 Cubby内部的层级踢出规则，将顺序槽位抽象为𝑘+1层区间并按优先级驱逐。
+6 Facility层面的Cubby分级组织，按层级𝑗管理不同容量与数量的Cubby以支持扩缩容。
+10
+分层次cubbies,是论文理论的混淆点与核心难点。
+3.3.1 tail 管理
+tail是各Facility中唯一允许未填满的Cubby，在执行插入操作之前，系统会
+通过调用 ensure_tail1来确保存在一个未满的 tail。如果当前的 tail 已经填满，则
+代码会把它移至𝑡𝑖𝑒𝑟𝑠[𝑡𝑎𝑖𝑙_𝑡𝑖𝑒𝑟]位置，并且创建一个新的tier0的tail，其大致步
+骤如算法 3所示：
+算法3tailCubby 维护
+1: Facility𝐹
+2: if 𝐹.𝑡𝑎𝑖𝑙 存在且未满then
+返回
+3:
+4: endif
+5: if 𝐹.𝑡𝑎𝑖𝑙_𝑜𝑤𝑛𝑒𝑑 存在且已满then
+6:
+将旧tail挂入F.tiers[F.tail_tier]
+7:
+清空F.tail
+8: endif
+9:
+创建1-tieredCubby，初始化slots、meta、free_slots
+10:
+令F.tail指向该Cubby，并由F.tail_owned持有
+删除操作时，如果删除的元素不在tailCubby中，删除后会从tailCubby中随
+机取一个元素插入对应的Cubby中，并同步更新payload、MetaEntry、occupied、
+free_slots和 Router。如果 tailCubby中没有元素，将会获取一个同样 tiered层次
+的cubby，将其设置为tail（可能会触发高tiered层次cubby的rebuild_down）。这
+样能始终维持非tailcubby满载这个不变量。
+3.3.2 j-tiered cubbies 数量与重建调度
+本系统代码实现了 Facility 中多 tiered Cubbies 的基础组织、数量检测和拆
+分/合并函数。目标数量由target_tier_count2(j)计算：
+(log(𝑗)𝑛)2
+𝑡 = ,
+𝑗 ⌊(log(𝑗+1)𝑛)2⌋
+1 保证当前Facility存在未满的tailCubby；若当前tail已满则将其挂入对应tier并新建tier0的tail。
+2 按层级𝑗与当前元素规模计算该层Cubby的目标个数𝑡 。
+𝑗
+11
+并至少取1。Cubby容量由cubby_capacity1(K,N,tier)派生：
+𝐾
+|𝑟 | ≈ ,
+𝑗 (log(𝑗)𝑁)2
+同时限制在[4,𝐾] 范围内。
+插入成功后，maybe_schedule_rebuild2检查各tiered的Cubby数量。若j-tiered
+cubbies 的数量大于 3𝑡 ，调用 rebuild_down3，将 𝑡 个 j-tiered cubbies 合并为一
+𝑗 𝑗
+𝑡
+个(𝑗 +1)-tieredcubby（数据需要恢复，然后重新依次插入）；若数量小于 𝑗，且
+2
+(𝑗 +1)-tiered cubbies 非空，则调度 rebuild_up4，将其中一个 (𝑗 +1)-tiered cubby
+拆分为𝑡 个j-tieredcubbies。
+𝑗
+算法4Facilitytier重建调度
+1: for𝑗 = 0,1,⋯,𝐹.𝑚𝑎𝑥_𝑡𝑖𝑒𝑟−1 do
+2: 𝑡 ← TARGET_TIER_COUNT(𝑗)
+𝑗
+3: 𝑐𝑛𝑡 ← |𝐹.𝑡𝑖𝑒𝑟𝑠[𝑗]|
+4: if 𝑐𝑛𝑡 > 3𝑡 then
+𝑗
+5: 调度REBUILD_DOWN(𝐹,𝑗 )
+6: elseif 𝑡 ⩾ 2 且𝑐𝑛𝑡 < 𝑡 /2且tier𝑗 +1 非空then
+𝑗 𝑗
+7:
+调度REBUILD_UP(𝐹,𝑗)
+8: endif
+9: endfor
+rebuild_down会从j-tieredcubbies取出𝑡 个Cubby，扫描其占用槽并恢复键，
+𝑗
+再创建一个tier𝑗 +1Cubby重新写入这些键；rebuild_up则从tier𝑗 +1取出一个
+Cubby，恢复其中所有键，创建 𝑡 个 tier 𝑗 Cubby 并将恢复的原始键全部插入其
+𝑗
+中。两者都会更新 Router，使 Router 记录指向新的 Cubby 和 Slot。当前实现具
+备拆分/合并的数据路径，但其调度粒度和容量控制仍属于工程化实现，不能直
+接推出理论均摊界。
+1 由𝐾、𝑁 与tier计算该层Cubby的槽位容量，并限制在[4,𝐾]内。
+2 检查各tier的Cubby数量是否偏离𝑡 ，必要时将合并或拆分任务加入后台重建队列。
+𝑗
+3 取出𝑡 个𝑗层Cubby，恢复其中键后合并为一个(𝑗+1)层Cubby并更新Router。
+𝑗
+4 取出一个(𝑗+1)层Cubby，恢复键后拆成𝑡 个𝑗层Cubby并重新插入。
+𝑗
+12
+3.4 MiniArray 与 MetaEntry
+3.4.1 MiniArray 变长元数据存储结构
+MiniArray是Cubby组件中用于存储各槽位变长元数据的核心结构，通过多
+组向量协同维护元数据的长度、偏移、原始内容与连续打包存储区域，实现变长
+数据的紧凑管理。
+MiniArray各成员变量的功能定义如下：
+• bitlens_[i]：记录第𝑖个元数据条目的二进制位长度；
+• offsets_[i]：标记第𝑖个元数据条目在连续位缓冲区中的起始比特位置；
+• entries_[i]：保存元数据条目的未压缩原始副本；
+• buf_：存储所有元数据经重新打包后的连续比特缓冲区。
+读取流程
+MiniArray读取流程
+1: function ACCESS(𝑖)
+2: 𝑏𝑙 ← 𝑏𝑖𝑡𝑙𝑒𝑛𝑠_[𝑖]
+3: 𝑠𝑡𝑎𝑟𝑡 ← 𝑜𝑓𝑓𝑠𝑒𝑡𝑠_[𝑖]
+4:
+从𝑏𝑢𝑓_中起始位置𝑠𝑡𝑎𝑟𝑡取出长度为𝑏𝑙 的比特数据
+5:
+将数据组织为64位字数组并返回
+6: endfunction
+读取操作由 access1完成，基于位长度与起始偏移量提取指定元数据并返回
+标准格式结果：
+更新流程
+MiniArray的更新操作由update2完成，针对指定槽位完成元数据修改，并触
+发全局重打包以保证存储布局一致性，流程如下：
+在理论设计中，MiniArray可通过内存B树与查表法实现均摊常数时间的更
+新操作。本系统实现保留了变长条目管理、连续比特打包、位数统计的核心接口
+1 按槽位下标从连续缓冲区读出该条变长元数据的比特串。
+2 修改指定槽位的元数据并调用repack重算偏移与缓冲区。
+13
+MiniArray更新流程
+1: procedureUPDATE(𝑖,𝑏𝑖𝑡𝑠,𝑏𝑖𝑡𝑙𝑒𝑛)
+2: if 𝑖越界then
+报错
+3:
+4: endif
+5: 𝑏𝑖𝑡𝑙𝑒𝑛𝑠_[𝑖] ← 𝑏𝑖𝑡𝑙𝑒𝑛
+6: 𝑒𝑛𝑡𝑟𝑖𝑒𝑠_[𝑖] ← 𝑏𝑖𝑡𝑠
+7: REPACK
+8: endprocedure
+9: procedureREPACK ▷按位长重算偏移并写回buf_
+10:
+根据bitlens_重新计算所有条目的偏移量offsets_
+11:
+为连续缓冲区buf_分配内存空间
+12:
+将所有元数据条目按偏移逐位写入buf_
+13: endprocedure
+语义，采用全局重打包策略替代复杂动态结构，在保证功能正确性的前提下简化
+实现逻辑。
+3.4.2 MetaEntry 元数据结构
+MetaEntry1是Cubby槽位元数据的结构化表示，用于存储哈希定位、路由校
+验、插入追踪所需的核心信息，MetaEntry各字段含义如下：
+• delta：计算公式为𝑔 −slot_index，用于根据实际槽位恢复哈希计算得到的
+𝑖
+Cubby偏好槽位；
+• mid_bits：计算公式为𝑔 /|𝐼|，用于恢复局部桶区间内的中间比特信息；
+𝑘
+• router_bits：路由校验指纹字段，由 splitmix64(key⊕gx_pi⊕常量) 计算后
+截断为16位得到；
+• insert_bits：插入过程标签，主要用于记录数据插入过程中的kick步数信息。
+位宽配置与编码规则
+MetaCodecLayout2根据哈希表参数 𝐾 与 Cubby 容量动态确定各字段编码位
+宽：
+1 槽位元数据的结构化字段集合，包含delta、mid_bits、router_bits、insert_bits等，配合payload恢复完整
+置换值𝑔 。
+𝑥
+2 由𝐾与Cubby容量派生mid_bits、router_bits、insert_bits等字段的编码位宽。
+14
+位宽配置
+1: 𝑚𝑖𝑑_𝑤 ← bit_width((𝐾 −1)/cubby_capacity)
+2: 𝑟𝑜𝑢𝑡_𝑤 ← 16
+3: 𝑖𝑛𝑠_𝑤 ← 8
+MetaEntry 生成逻辑
+make_meta_entry1是 MetaEntry 结构体的核心生成函数，基于哈希计算结果
+与插入参数完成字段赋值，核心逻辑如下：
+MetaEntry构造
+1: 𝑔_star ← 𝑔 &(𝑁 −1) //计算全局哈希种子（取模N）
+𝑥
+2: 𝑔_𝑘 ← 𝑔_star&(𝐾 −1) //提取组内索引（取模K）
+3: 𝑔_𝑖 ← 𝑔 mod 𝑐𝑢𝑏𝑏𝑦_𝑐𝑎𝑝𝑎𝑐𝑖𝑡𝑦 //计算在cubby中的偏移
+𝑘
+4: 𝑑𝑒𝑙𝑡𝑎 ← 𝑔 −𝑠𝑙𝑜𝑡_𝑖𝑛𝑑𝑒𝑥 //计算与当前槽位的偏移差
+𝑖
+5: 𝑚𝑖𝑑_𝑏𝑖𝑡𝑠 ← 𝑔 /𝑐𝑢𝑏𝑏𝑦_𝑐𝑎𝑝𝑎𝑐𝑖𝑡𝑦 //提取中间位（组编号）
+𝑘
+6: 𝑟𝑜𝑢𝑡𝑒𝑟_𝑏𝑖𝑡𝑠 ← 截断(hash(𝑘𝑒𝑦,𝑔 ), 16) //路由信息（16位哈希截断）
+𝑥
+7: 𝑖𝑛𝑠𝑒𝑟𝑡_𝑏𝑖𝑡𝑠 ← 𝑖𝑛𝑠_𝑡𝑎𝑔&0xff //插入标签（低8位）
+函数参数 facility_r 仅作为上下文参数传入，不直接参与字段计算，该参数
+将在数据恢复阶段与元数据配合完成哈希值的完整重建。
+3.5 Router 组件
+Router要维护键到(Cubby∗,slot)的映射关系，其内部条目包含原始键，目标
+位置以及由key_bits2得到的随机比特串，而节点则保存左右孩子，叶子条目的下
+标，碰撞桶的下标以及分裂位split_bit。
+Router 并非按键值大小来组织结构，而是凭借随机比特串形成 Patricia 风格
+的二叉前缀树3，此前缀树仅在 Router 内部用以识别随机比特串，执行查询时，
+系统从根节点出发，遵照split_bit获取查询键中的随机比特，并决定向左或向右
+子树探寻；直至抵达叶节点才对比原本的键；要是存在多个键其 64 位随机比特
+串完全一致，则需执行碰撞桶4的线性扫描操作。
+1 根据键、置换值、槽位下标及表参数生成delta、mid_bits、router_bits、insert_bits等字段。
+2 为键生成Router前缀树所用的64位随机比特串。
+3 Patricia树是一种压缩前缀树：内部结点仅在有分支处按某一比特位分裂，叶结点存完整键或条目。
+4 Patricia树中随机比特串相同的多个键所落入的线性扫描容器，用于消解哈希碰撞。
+15
+算法5Router查询流程
+1:
+输入键𝑥
+2: bits ← KEY_BITS(𝑥)，steps ← 0，𝑢 ← 𝑟𝑜𝑜𝑡
+3:
+while𝑢为合法结点do
+4: steps ← steps+1
+5: if 𝑢为碰撞桶then
+在桶内逐项比较原始键
+6:
+7:
+返回命中位置或未命中，以及steps
+8: elseif 𝑢为叶子then
+9:
+比较叶子entry中的原始键
+10:
+返回命中位置或未命中，以及steps
+11: else
+12:
+按bits在split_bit处的取值进入左/右子树
+13: endif
+14: endwhile
+返回未命中
+15:
+插入或者删除Router记录之后，代码会调用rebuild1，并利用BitWriter遍历
+结构来估算 encoded_bits_。所以 bits_total2可以用来了解路由结构的逻辑编码规
+模，但它并不能表示真实的序列化存储或者运行时的内存占用情况，按照理论中
+的LocalQueryRouter理应可以在紧凑bitstream上做到常数时间的动态更新；不
+过当下的实现则是用整体重建的方式来取代这种复杂的结构。
+3.6 商压缩与键恢复
+商压缩由槽内payload、MiniArray中的MetaEntry以及当前表上下文共同完
+成。设待处理键为𝑥，𝑔 = 𝜋(𝑥)，ℓ = log𝑁。槽位slots[i]保存
+𝑥
+𝑝𝑎𝑦𝑙𝑜𝑎𝑑 = 𝑔 ≫ ℓ,
+𝑥
+即去掉低ℓ位后的高位商。低ℓ位参与地址拆分和局部恢复，不直接完整保存。
+令
+𝑔∗ = 𝑔 and(𝑁 −1), 𝑟 = ⌊𝑔∗/𝐾⌋, 𝑔 = 𝑔∗ and(𝐾 −1).
+𝑥 𝑘
+1 重新计算各entry的随机比特串，重建Patricia前缀树并更新编码位长统计。
+2 返回Router前缀树逻辑编码的累计比特数，用于空间统计。
+16
+给定Cubby容量|𝐼|和实际槽位𝑖，代码计算
+𝑔 = 𝑔 mod |𝐼|, 𝑑𝑒𝑙𝑡𝑎 = 𝑔 −𝑖, 𝑚𝑖𝑑_𝑏𝑖𝑡𝑠 = ⌊𝑔 /|𝐼|⌋.
+𝑖 𝑘 𝑖 𝑘
+恢复时再按
+𝑔 = 𝑖+𝑑𝑒𝑙𝑡𝑎, 𝑔 = 𝑚𝑖𝑑_𝑏𝑖𝑡𝑠×|𝐼|+𝑔 , 𝑔∗ = 𝑟𝐾+𝑔 , 𝑔 = (𝑝𝑎𝑦𝑙𝑜𝑎𝑑 ≪ ℓ)|𝑔∗
+𝑖 𝑘 𝑖 𝑘 𝑥
+重建完整置换值。若需要恢复原始键，则继续调用Feistel逆置换𝜋−1。
+rest/payload Facility编号𝑟 中间位mid_bits 偏好槽位𝑔
+𝑖
+𝑔 >>log𝑁 ⌊𝑔∗/𝐾⌋ ⌊𝑔 /|𝐼|⌋ 𝑔 mod|𝐼|
+𝑥 𝑘 𝑘
+存入slots[i] 由地址上下文提供 存入MetaEntry 由delta与槽位恢复
+图3-1 𝜋(𝑥)在商压缩实现中的位段用途
+payload以及MetaEntry都依靠表规模，局部桶数，Facility编号和Cubby容
+量，执行扩缩容迁移之后，元素需先还原成原本的键，然后依照新表的状态加以
+重新写入，不可直接拷贝旧槽位里的payload和meta。
+算法6从槽位恢复原始键
+1:
+输入Facility编号𝑟、Cubby𝐶、槽位𝑖
+2: if 𝑖越界或C.slots[i]then 为空
+返回空
+3:
+4: endif
+5:
+从C.meta[i]解码MetaEntry
+6:
+根据𝑟,𝑁,𝐾,𝐶.𝑐𝑎𝑝𝑎𝑐𝑖𝑡𝑦,𝑖,payload重建𝑔
+𝑥
+7: if 重建失败then
+返回空
+8:
+9: endif
+10: 返回𝜋−1(𝑔 )
+𝑥
+3.7 双表渐进迁移
+论文提及了两种程度的扩容和缩容，其中一种是多层次的j-tieredcubbies设
+计，这已经实现，另一种是在大规模的扩容缩容，完全是新的表与旧的表进行迁
+移，例如扩容时，会将旧表中的两个 Facility 的数据插入新表的一个 Facility 中，
+同理缩容相同的逻辑。当系统哈希表正在进行迁移时，会对应旧表和新表依次执
+17
+行对应的插入、删除、查询操作，如果操作完成就提前终止，想要实现这样的无
+感迁移，就需要实现渐进式的双表迁移1，具体流程如算法7所示。
+算法7单次迁移预算
+1: if old_then 不存在
+返回
+2:
+3: endif
+4:
+取migrate_progress_指向的旧Facility
+5:
+扫描该Facility的tail和所有tierCubby，恢复占用键集合𝑆
+6: for𝑥 ∈ 𝑆 do
+7: 按新表参数计算𝑔 = 𝜋(𝑥)，定位activeFacility
+𝑥
+8: if 𝑥已存在于active表then
+跳过
+9:
+10: else
+11:
+调用ensure_tail和kkick_insert2重新写入
+12: endif
+13: endfor
+14:
+清空该旧Facility，推进迁移进度
+15:
+若所有旧Facility均已处理，则释放old_
+系统经由maybe_resize_locked3来判断是否执行扩缩容操作，当下不存在old
+表，而且元素数量超出 𝑙𝑜𝑎𝑑_𝑓𝑎𝑐𝑡𝑜𝑟×𝑁 时，把目标规模设置成 2𝑁。如果元素
+数量不为零，又小于𝑁/4的话，则把目标规模设定为max{2,𝑁/2}，一旦发生这
+种情况，start_migration4就会清空重建调度队列，并把 active 表移至 old_，然后
+按照新的 𝑁 和 𝐾 创建一个新的 active 表，这个过程中，元素总数 n_ 保持不变，
+新增的数据只会被添加到active表当中。
+迁移由 run_migrate_budget5推动，每当插入或者删除操作结束之后，系统
+最多只会处理一个旧的 Facility。在处理过程中不依靠旧 Router，而是要遍历旧
+Facility的tail及其所有的tierCubby，经由recover_key_from_slot6（算法6）来重
+建原本的键，然后按照新的表参数重新确定位置并执行插入到 active 表的操作，
+如果某个键已在 active 表中有对应项，则直接忽略这个键，当一个旧 Facility 的
+处理完毕之后，它的Router，tiers和tail都会被清除。
+1 当前系统并没有完整地实现渐进式双表迁移，只实现了代码框架，并没有数据支撑；渐进式扩缩容的思
+想与动态可调整哈希表[1]等近年方法一脉相承。
+3 在持锁状态下根据负载因子判断是否需要扩容或缩容。
+4 将当前active表移入old_，按新规模重建active表并初始化迁移进度。
+5 每次操作后最多迁移一个旧Facility：恢复其中键并插入active表，推进migrate_progress_。
+6 从槽位payload与MetaEntry重建置换值并求逆，得到原始键。
+18
+该迁移方式避免扩缩容时一次性重哈希全部元素。其限制是：查询不会消
+耗迁移预算；若扩缩容后长期没有插入或删除，old 表会继续保留。此外，由于
+payload和MetaEntry依赖新表上下文，迁移必须恢复键并重新插入。
+3.8 插入路径与 k-kick 实现
+外层函数加锁后调用insert_no_lock1，成功插入后检查扩缩容，随后执行一
+个后台重建预算和一个迁移预算。真正写入发生在kkick_insert中。
+插入流程如下：先算出𝑔 = 𝜋(𝑥)，找到active表里对应的Facility和Router
+𝑥
+桶；如果active表已有此键，则直接返回inserted=false。若是处于迁移窗口，则
+还要查看 old 表，防止同一个键在迁移过程中被重复写入，确定键不存在之后，
+系统会调用ensure_tail来准备好tailCubby，并在其中执行k-kick操作。
+当前k-kick是单Cubby内的有界踢出链。探测位置由
+probe_slot2(𝑥,|𝐼|,𝑠) = splitmix64(𝜋(𝑥)⊕𝑠⋅𝑐) mod |𝐼|
+得到，其中 𝑠 为当前步数，𝑐 为固定常量。若探测槽为空，系统写入 payload 和
+MetaEntry，更新occupied、free_slots和Router；若探测槽已占用，则先恢复被踢
+出的旧键，删除旧 Router 记录，再用当前键覆盖该槽，并将旧键作为下一轮待
+插入键。经过𝑘 轮仍未结束时，系统通过FreeSlotTree选择空槽兜底。
+理论 k-kick 树需要维护更完整的深度、饱和状态和合法驱逐对象。当前实
+现保留了“单 Cubby 内有限交换”的核心接口，但用伪随机探测链和空槽兜底
+替代理论结构。因此，实验中的kick_count表示当前代码中的移动次数，不能直
+接等同于理论交换成本。
+1 在无额外加锁前提下完成插入、扩缩容判断及后台重建/迁移预算。
+2 按当前键、Cubby容量与踢出步数𝑠计算本步探针槽位。
+19
+算法8tailCubby 内的有界踢出插入
+1:
+输入Facility𝐹、tailCubby 𝐶、待插入键𝑥
+2: cur ← 𝑥
+3: for𝑠 = 0,1,⋯,𝑘 do
+4: 𝑝𝑜𝑠 ← PROBE_SLOT(cur,𝐶.𝑐𝑎𝑝𝑎𝑐𝑖𝑡𝑦,𝑠)
+5: if C.slots[pos] 为空then
+6:
+写入cur的payload和MetaEntry
+7:
+更新occupied、free_slots与Router
+8:
+返回成功，移动次数为𝑠
+9: endif
+10:
+从𝑝𝑜𝑠恢复被踢出的键kicked
+11: if 恢复失败then
+返回失败
+12:
+13: endif
+14:
+删除kicked的旧Router记录
+15:
+用cur 覆盖𝑝𝑜𝑠，并登记新Router记录
+16: cur ← kicked
+17: endfor
+18:
+通过FreeSlotTree查找空槽，写入cur
+19:
+返回成功，移动次数为𝑘+1
+3.9 查询与删除路径
+查询路径仅读取结构，不会推进迁移预算，系统首先在active表里定位Router
+桶，经由Router::locate1得到候选位置，然后用slot_pi_matches2解码meta，重新
+创建𝜋(𝑥)并做比较，如果active表未命中而且old表存在，就对old表重复前面
+的过程，Router访问步数会被记入router_probe_steps。
+删除路径先执行与查询相同的定位和槽位校验。若命中 active 表中的槽位，
+系统清空slots[slot]，将对应MiniArray条目更新为空，移除occupied中的槽位下
+标，调用mark_free标记空闲，并从Router中删除该键。如果被删除的Cubby不
+是 tail，系统会从 tail 的 occupied 中取出一个元素，恢复其原始键后搬移到刚刚
+空出的槽位，并重新写入payload、MetaEntry和Router记录。
+当处在迁移的状态时，插入只写入 active 表，但查询和删除必须同时考虑
+active 表和 old 表。删除时若 old 表中仍存在该键，也需要删除，否则后续迁移
+可能把旧键重新搬入active表。
+1 在Router前缀树中查找键，返回候选(Cubby,slot)及访问步数。
+2 从候选槽位解码元数据并重建𝜋(𝑥)，与查询键的置换值比对以判定命中。
+20
+算法9查询命中判定
+1:
+输入查询键𝑥
+2:
+在active表中定位(𝑟,𝑏)，调用D[b].locate(x)
+3: if Router返回候选槽位(𝐶,𝑖) then
+4:
+调用slot_pi_matches校验候选槽位
+若校验通过，返回命中
+5:
+6: endif
+7: if active表未命中且old表存在then
+8:
+在old表中重复定位与槽位校验
+9: endif
+返回最终查询结果
+10:
+21

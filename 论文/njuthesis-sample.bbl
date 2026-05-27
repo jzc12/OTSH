@@ -19,7 +19,143 @@
 
 \refsection{0}
   \datalist[entry]{none/global//global/global/global}
-    \entry{pagh2021otsh}{online}{}{}
+    \entry{knuth1973sorting}{book}{}{}
+      \name{author}{1}{}{%
+        {{hash=ec08e6f01da5f3814f28a70c89c64656}{%
+           family={Knuth},
+           familyi={K\bibinitperiod},
+           given={Donald\bibnamedelima E.},
+           giveni={D\bibinitperiod\bibinitdelim E\bibinitperiod}}}%
+      }
+      \name{namea}{1}{}{%
+        {{hash=ec08e6f01da5f3814f28a70c89c64656}{%
+           family={Knuth},
+           familyi={K\bibinitperiod},
+           given={Donald\bibnamedelima E.},
+           giveni={D\bibinitperiod\bibinitdelim E\bibinitperiod}}}%
+      }
+      \list{language}{1}{%
+        {english}%
+      }
+      \list{location}{1}{%
+        {Reading, MA}%
+      }
+      \list{publisher}{1}{%
+        {Addison-Wesley}%
+      }
+      \strng{namehash}{ec08e6f01da5f3814f28a70c89c64656}
+      \strng{fullhash}{ec08e6f01da5f3814f28a70c89c64656}
+      \strng{fullhashraw}{ec08e6f01da5f3814f28a70c89c64656}
+      \strng{bibnamehash}{ec08e6f01da5f3814f28a70c89c64656}
+      \strng{authorbibnamehash}{ec08e6f01da5f3814f28a70c89c64656}
+      \strng{authornamehash}{ec08e6f01da5f3814f28a70c89c64656}
+      \strng{authorfullhash}{ec08e6f01da5f3814f28a70c89c64656}
+      \strng{authorfullhashraw}{ec08e6f01da5f3814f28a70c89c64656}
+      \strng{nameabibnamehash}{ec08e6f01da5f3814f28a70c89c64656}
+      \strng{nameanamehash}{ec08e6f01da5f3814f28a70c89c64656}
+      \strng{nameafullhash}{ec08e6f01da5f3814f28a70c89c64656}
+      \strng{nameafullhashraw}{ec08e6f01da5f3814f28a70c89c64656}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{langid}{english}
+      \field{languageid}{english}
+      \field{lansortorder}{4}
+      \field{title}{The Art of Computer Programming, Volume 3: Sorting and Searching}
+      \field{usera}{M}
+      \field{userd}{english}
+      \field{userf}{english}
+      \field{year}{1973}
+      \field{dateera}{ce}
+      \keyw{knuth1973sorting}
+    \endentry
+    \entry{bender2024sosa}{inproceedings}{}{}
+      \name{author}{4}{}{%
+        {{hash=73b35b4e99fa82d2e693c149ec5d1d17}{%
+           family={Bender},
+           familyi={B\bibinitperiod},
+           given={Michael\bibnamedelima A.},
+           giveni={M\bibinitperiod\bibinitdelim A\bibinitperiod}}}%
+        {{hash=9f27630f7ecbd81102be7007c9df29d5}{%
+           family={Farach-Colton},
+           familyi={F\bibinithyphendelim C\bibinitperiod},
+           given={Martín},
+           giveni={M\bibinitperiod}}}%
+        {{hash=6a6cd7088f6bee5921c6094fc0c3e234}{%
+           family={Kuszmaul},
+           familyi={K\bibinitperiod},
+           given={John},
+           giveni={J\bibinitperiod}}}%
+        {{hash=49e21e36aed3fa8c3a0a7b61e39105a3}{%
+           family={Kuszmaul},
+           familyi={K\bibinitperiod},
+           given={William},
+           giveni={W\bibinitperiod}}}%
+      }
+      \name{namea}{4}{}{%
+        {{hash=73b35b4e99fa82d2e693c149ec5d1d17}{%
+           family={Bender},
+           familyi={B\bibinitperiod},
+           given={Michael\bibnamedelima A.},
+           giveni={M\bibinitperiod\bibinitdelim A\bibinitperiod}}}%
+        {{hash=9f27630f7ecbd81102be7007c9df29d5}{%
+           family={Farach-Colton},
+           familyi={F\bibinithyphendelim C\bibinitperiod},
+           given={Martín},
+           giveni={M\bibinitperiod}}}%
+        {{hash=6a6cd7088f6bee5921c6094fc0c3e234}{%
+           family={Kuszmaul},
+           familyi={K\bibinitperiod},
+           given={John},
+           giveni={J\bibinitperiod}}}%
+        {{hash=49e21e36aed3fa8c3a0a7b61e39105a3}{%
+           family={Kuszmaul},
+           familyi={K\bibinitperiod},
+           given={William},
+           giveni={W\bibinitperiod}}}%
+      }
+      \list{language}{1}{%
+        {english}%
+      }
+      \list{publisher}{1}{%
+        {SIAM}%
+      }
+      \strng{namehash}{ea17af64b4155d928fe840fac634dc54}
+      \strng{fullhash}{9011e8646c80be96ff5f6203840ac5d6}
+      \strng{fullhashraw}{9011e8646c80be96ff5f6203840ac5d6}
+      \strng{bibnamehash}{7491e014bc5ea6b0c0f7bbf72e92abde}
+      \strng{authorbibnamehash}{7491e014bc5ea6b0c0f7bbf72e92abde}
+      \strng{authornamehash}{ea17af64b4155d928fe840fac634dc54}
+      \strng{authorfullhash}{9011e8646c80be96ff5f6203840ac5d6}
+      \strng{authorfullhashraw}{9011e8646c80be96ff5f6203840ac5d6}
+      \strng{nameabibnamehash}{7491e014bc5ea6b0c0f7bbf72e92abde}
+      \strng{nameanamehash}{ea17af64b4155d928fe840fac634dc54}
+      \strng{nameafullhash}{9011e8646c80be96ff5f6203840ac5d6}
+      \strng{nameafullhashraw}{9011e8646c80be96ff5f6203840ac5d6}
+      \field{extraname}{1}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{Proceedings of the 2024 {SIAM} Symposium on Simplicity in Algorithms ({SOSA} 2024)}
+      \field{langid}{english}
+      \field{languageid}{english}
+      \field{lansortorder}{4}
+      \field{title}{Modern Hashing Made Simple}
+      \field{usera}{C}
+      \field{userd}{english}
+      \field{userf}{english}
+      \field{year}{2024}
+      \field{dateera}{ce}
+      \field{pages}{363\bibrangedash 373}
+      \range{pages}{11}
+      \verb{doi}
+      \verb 10.1137/1.9781611977936.33
+      \endverb
+      \keyw{bender2024sosa}
+    \endentry
+    \entry{bender2022otsh}{inproceedings}{}{}
       \name{author}{5}{}{%
         {{hash=73b35b4e99fa82d2e693c149ec5d1d17}{%
            family={Bender},
@@ -77,6 +213,12 @@
       \list{language}{1}{%
         {english}%
       }
+      \list{location}{1}{%
+        {Rome, Italy}%
+      }
+      \list{publisher}{1}{%
+        {ACM}%
+      }
       \strng{namehash}{ea17af64b4155d928fe840fac634dc54}
       \strng{fullhash}{324d34093aebecc6252089297c7dffe5}
       \strng{fullhashraw}{324d34093aebecc6252089297c7dffe5}
@@ -89,118 +231,372 @@
       \strng{nameanamehash}{ea17af64b4155d928fe840fac634dc54}
       \strng{nameafullhash}{324d34093aebecc6252089297c7dffe5}
       \strng{nameafullhashraw}{324d34093aebecc6252089297c7dffe5}
-      \field{sortinit}{1}
-      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{extraname}{2}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
-      \field{day}{4}
-      \field{eprinttype}{arxiv}
+      \field{booktitle}{Proceedings of the 54th Annual {ACM} {SIGACT} Symposium on Theory of Computing}
+      \field{eventtitle}{{STOC} 2022}
       \field{langid}{english}
       \field{languageid}{english}
       \field{lansortorder}{4}
-      \field{month}{11}
       \field{title}{On the Optimal Time/Space Tradeoff for Hash Tables}
-      \field{urlday}{2}
-      \field{urlmonth}{5}
-      \field{urlyear}{2026}
-      \field{usera}{EB}
+      \field{usera}{C}
       \field{userd}{english}
       \field{userf}{english}
-      \field{year}{2021}
+      \field{year}{2022}
       \field{dateera}{ce}
-      \field{urldateera}{ce}
-      \verb{eprint}
-      \verb 2111.00602
+      \field{pages}{1284\bibrangedash 1297}
+      \range{pages}{14}
+      \verb{doi}
+      \verb 10.1145/3519935.3519969
       \endverb
-      \verb{urlraw}
-      \verb https://arxiv.org/abs/2111.00602
-      \endverb
-      \verb{url}
-      \verb https://arxiv.org/abs/2111.00602
-      \endverb
-      \keyw{pagh2021otsh}
+      \keyw{bender2022otsh}
     \endentry
-    \entry{cormen2009introduction}{book}{}{}
-      \name{author}{4}{}{%
-        {{hash=835b8c52757d98c15859b416316d9820}{%
-           family={Cormen},
-           familyi={C\bibinitperiod},
-           given={Thomas\bibnamedelima H.},
-           giveni={T\bibinitperiod\bibinitdelim H\bibinitperiod}}}%
-        {{hash=a389dea91a76366c4b4af5f52a928a76}{%
-           family={Leiserson},
-           familyi={L\bibinitperiod},
-           given={Charles\bibnamedelima E.},
-           giveni={C\bibinitperiod\bibinitdelim E\bibinitperiod}}}%
-        {{hash=3a964821f97ee17f8bb285bc61c52899}{%
-           family={Rivest},
-           familyi={R\bibinitperiod},
-           given={Ronald\bibnamedelima L.},
-           giveni={R\bibinitperiod\bibinitdelim L\bibinitperiod}}}%
-        {{hash=bc78426660400760f77758aec45e71a8}{%
-           family={Stein},
-           familyi={S\bibinitperiod},
-           given={Clifford},
-           giveni={C\bibinitperiod}}}%
+    \entry{kuszmaul2024filters}{inproceedings}{}{}
+      \name{author}{2}{}{%
+        {{hash=49e21e36aed3fa8c3a0a7b61e39105a3}{%
+           family={Kuszmaul},
+           familyi={K\bibinitperiod},
+           given={William},
+           giveni={W\bibinitperiod}}}%
+        {{hash=17a9ed6e8bcb6bacb4bdade7da976216}{%
+           family={Walzer},
+           familyi={W\bibinitperiod},
+           given={Stefan},
+           giveni={S\bibinitperiod}}}%
       }
-      \name{namea}{4}{}{%
-        {{hash=835b8c52757d98c15859b416316d9820}{%
-           family={Cormen},
+      \name{namea}{2}{}{%
+        {{hash=49e21e36aed3fa8c3a0a7b61e39105a3}{%
+           family={Kuszmaul},
+           familyi={K\bibinitperiod},
+           given={William},
+           giveni={W\bibinitperiod}}}%
+        {{hash=17a9ed6e8bcb6bacb4bdade7da976216}{%
+           family={Walzer},
+           familyi={W\bibinitperiod},
+           given={Stefan},
+           giveni={S\bibinitperiod}}}%
+      }
+      \list{language}{1}{%
+        {english}%
+      }
+      \list{publisher}{1}{%
+        {ACM}%
+      }
+      \strng{namehash}{8b6389df86a96f6fda8f2bc37b160801}
+      \strng{fullhash}{f02bfecf8f8f09c5dae3affbb7522021}
+      \strng{fullhashraw}{f02bfecf8f8f09c5dae3affbb7522021}
+      \strng{bibnamehash}{f02bfecf8f8f09c5dae3affbb7522021}
+      \strng{authorbibnamehash}{f02bfecf8f8f09c5dae3affbb7522021}
+      \strng{authornamehash}{8b6389df86a96f6fda8f2bc37b160801}
+      \strng{authorfullhash}{f02bfecf8f8f09c5dae3affbb7522021}
+      \strng{authorfullhashraw}{f02bfecf8f8f09c5dae3affbb7522021}
+      \strng{nameabibnamehash}{f02bfecf8f8f09c5dae3affbb7522021}
+      \strng{nameanamehash}{8b6389df86a96f6fda8f2bc37b160801}
+      \strng{nameafullhash}{f02bfecf8f8f09c5dae3affbb7522021}
+      \strng{nameafullhashraw}{f02bfecf8f8f09c5dae3affbb7522021}
+      \field{sortinit}{3}
+      \field{sortinithash}{ad6fe7482ffbd7b9f99c9e8b5dccd3d7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{Proceedings of the 56th Annual {ACM} Symposium on Theory of Computing ({STOC} 2024)}
+      \field{langid}{english}
+      \field{languageid}{english}
+      \field{lansortorder}{4}
+      \field{title}{Space Lower Bounds for Dynamic Filters and Value-Dynamic Retrieval}
+      \field{usera}{C}
+      \field{userd}{english}
+      \field{userf}{english}
+      \field{year}{2024}
+      \field{dateera}{ce}
+      \field{pages}{1153\bibrangedash 1164}
+      \range{pages}{12}
+      \verb{doi}
+      \verb 10.1145/3618260.3649649
+      \endverb
+      \keyw{kuszmaul2024filters}
+    \endentry
+    \entry{bender2024iceberg}{article}{}{}
+      \name{author}{5}{}{%
+        {{hash=73b35b4e99fa82d2e693c149ec5d1d17}{%
+           family={Bender},
+           familyi={B\bibinitperiod},
+           given={Michael\bibnamedelima A.},
+           giveni={M\bibinitperiod\bibinitdelim A\bibinitperiod}}}%
+        {{hash=8d4aa635adaa0557ce6a59c249c9997a}{%
+           family={Conway},
            familyi={C\bibinitperiod},
-           given={Thomas\bibnamedelima H.},
-           giveni={T\bibinitperiod\bibinitdelim H\bibinitperiod}}}%
-        {{hash=a389dea91a76366c4b4af5f52a928a76}{%
-           family={Leiserson},
-           familyi={L\bibinitperiod},
-           given={Charles\bibnamedelima E.},
-           giveni={C\bibinitperiod\bibinitdelim E\bibinitperiod}}}%
-        {{hash=3a964821f97ee17f8bb285bc61c52899}{%
-           family={Rivest},
-           familyi={R\bibinitperiod},
-           given={Ronald\bibnamedelima L.},
-           giveni={R\bibinitperiod\bibinitdelim L\bibinitperiod}}}%
-        {{hash=bc78426660400760f77758aec45e71a8}{%
-           family={Stein},
-           familyi={S\bibinitperiod},
-           given={Clifford},
-           giveni={C\bibinitperiod}}}%
+           given={Alex},
+           giveni={A\bibinitperiod}}}%
+        {{hash=9f27630f7ecbd81102be7007c9df29d5}{%
+           family={Farach-Colton},
+           familyi={F\bibinithyphendelim C\bibinitperiod},
+           given={Martín},
+           giveni={M\bibinitperiod}}}%
+        {{hash=49e21e36aed3fa8c3a0a7b61e39105a3}{%
+           family={Kuszmaul},
+           familyi={K\bibinitperiod},
+           given={William},
+           giveni={W\bibinitperiod}}}%
+        {{hash=e5c5c353ba16c47494cc84e725ec2149}{%
+           family={Tagliavini},
+           familyi={T\bibinitperiod},
+           given={Guido},
+           giveni={G\bibinitperiod}}}%
+      }
+      \name{namea}{5}{}{%
+        {{hash=73b35b4e99fa82d2e693c149ec5d1d17}{%
+           family={Bender},
+           familyi={B\bibinitperiod},
+           given={Michael\bibnamedelima A.},
+           giveni={M\bibinitperiod\bibinitdelim A\bibinitperiod}}}%
+        {{hash=8d4aa635adaa0557ce6a59c249c9997a}{%
+           family={Conway},
+           familyi={C\bibinitperiod},
+           given={Alex},
+           giveni={A\bibinitperiod}}}%
+        {{hash=9f27630f7ecbd81102be7007c9df29d5}{%
+           family={Farach-Colton},
+           familyi={F\bibinithyphendelim C\bibinitperiod},
+           given={Martín},
+           giveni={M\bibinitperiod}}}%
+        {{hash=49e21e36aed3fa8c3a0a7b61e39105a3}{%
+           family={Kuszmaul},
+           familyi={K\bibinitperiod},
+           given={William},
+           giveni={W\bibinitperiod}}}%
+        {{hash=e5c5c353ba16c47494cc84e725ec2149}{%
+           family={Tagliavini},
+           familyi={T\bibinitperiod},
+           given={Guido},
+           giveni={G\bibinitperiod}}}%
+      }
+      \list{language}{1}{%
+        {english}%
+      }
+      \strng{namehash}{ea17af64b4155d928fe840fac634dc54}
+      \strng{fullhash}{4c2132218716d5abd6ed79c10afddcbc}
+      \strng{fullhashraw}{4c2132218716d5abd6ed79c10afddcbc}
+      \strng{bibnamehash}{9dce20d137a190e5a7ba49f42268b251}
+      \strng{authorbibnamehash}{9dce20d137a190e5a7ba49f42268b251}
+      \strng{authornamehash}{ea17af64b4155d928fe840fac634dc54}
+      \strng{authorfullhash}{4c2132218716d5abd6ed79c10afddcbc}
+      \strng{authorfullhashraw}{4c2132218716d5abd6ed79c10afddcbc}
+      \strng{nameabibnamehash}{9dce20d137a190e5a7ba49f42268b251}
+      \strng{nameanamehash}{ea17af64b4155d928fe840fac634dc54}
+      \strng{nameafullhash}{4c2132218716d5abd6ed79c10afddcbc}
+      \strng{nameafullhashraw}{4c2132218716d5abd6ed79c10afddcbc}
+      \field{extraname}{3}
+      \field{sortinit}{4}
+      \field{sortinithash}{9381316451d1b9788675a07e972a12a7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{Journal of the {ACM}}
+      \field{langid}{english}
+      \field{languageid}{english}
+      \field{lansortorder}{4}
+      \field{number}{1}
+      \field{title}{Iceberg Hashing: Optimizing Many Hash-Table Criteria at Once}
+      \field{usera}{J}
+      \field{userd}{english}
+      \field{userf}{english}
+      \field{volume}{71}
+      \field{year}{2024}
+      \field{dateera}{ce}
+      \field{pages}{3:1\bibrangedash 3:49}
+      \range{pages}{-1}
+      \verb{doi}
+      \verb 10.1145/3625817
+      \endverb
+      \keyw{bender2024iceberg}
+    \endentry
+    \entry{pandey2023iceberght}{inproceedings}{}{}
+      \name{author}{7}{}{%
+        {{hash=8678b35641533d05fddb28a5cc563f52}{%
+           family={Pandey},
+           familyi={P\bibinitperiod},
+           given={Prashant},
+           giveni={P\bibinitperiod}}}%
+        {{hash=73b35b4e99fa82d2e693c149ec5d1d17}{%
+           family={Bender},
+           familyi={B\bibinitperiod},
+           given={Michael\bibnamedelima A.},
+           giveni={M\bibinitperiod\bibinitdelim A\bibinitperiod}}}%
+        {{hash=8d4aa635adaa0557ce6a59c249c9997a}{%
+           family={Conway},
+           familyi={C\bibinitperiod},
+           given={Alex},
+           giveni={A\bibinitperiod}}}%
+        {{hash=9f27630f7ecbd81102be7007c9df29d5}{%
+           family={Farach-Colton},
+           familyi={F\bibinithyphendelim C\bibinitperiod},
+           given={Martín},
+           giveni={M\bibinitperiod}}}%
+        {{hash=49e21e36aed3fa8c3a0a7b61e39105a3}{%
+           family={Kuszmaul},
+           familyi={K\bibinitperiod},
+           given={William},
+           giveni={W\bibinitperiod}}}%
+        {{hash=e5c5c353ba16c47494cc84e725ec2149}{%
+           family={Tagliavini},
+           familyi={T\bibinitperiod},
+           given={Guido},
+           giveni={G\bibinitperiod}}}%
+        {{hash=e4f16441e3859580a81b43a585d9a8ae}{%
+           family={Johnson},
+           familyi={J\bibinitperiod},
+           given={Rob},
+           giveni={R\bibinitperiod}}}%
+      }
+      \name{namea}{7}{}{%
+        {{hash=8678b35641533d05fddb28a5cc563f52}{%
+           family={Pandey},
+           familyi={P\bibinitperiod},
+           given={Prashant},
+           giveni={P\bibinitperiod}}}%
+        {{hash=73b35b4e99fa82d2e693c149ec5d1d17}{%
+           family={Bender},
+           familyi={B\bibinitperiod},
+           given={Michael\bibnamedelima A.},
+           giveni={M\bibinitperiod\bibinitdelim A\bibinitperiod}}}%
+        {{hash=8d4aa635adaa0557ce6a59c249c9997a}{%
+           family={Conway},
+           familyi={C\bibinitperiod},
+           given={Alex},
+           giveni={A\bibinitperiod}}}%
+        {{hash=9f27630f7ecbd81102be7007c9df29d5}{%
+           family={Farach-Colton},
+           familyi={F\bibinithyphendelim C\bibinitperiod},
+           given={Martín},
+           giveni={M\bibinitperiod}}}%
+        {{hash=49e21e36aed3fa8c3a0a7b61e39105a3}{%
+           family={Kuszmaul},
+           familyi={K\bibinitperiod},
+           given={William},
+           giveni={W\bibinitperiod}}}%
+        {{hash=e5c5c353ba16c47494cc84e725ec2149}{%
+           family={Tagliavini},
+           familyi={T\bibinitperiod},
+           given={Guido},
+           giveni={G\bibinitperiod}}}%
+        {{hash=e4f16441e3859580a81b43a585d9a8ae}{%
+           family={Johnson},
+           familyi={J\bibinitperiod},
+           given={Rob},
+           giveni={R\bibinitperiod}}}%
       }
       \list{language}{1}{%
         {english}%
       }
       \list{location}{1}{%
-        {Cambridge, MA}%
+        {Seattle, WA, USA}%
       }
       \list{publisher}{1}{%
-        {MIT Press}%
+        {ACM}%
       }
-      \strng{namehash}{c251cdfd036d9474565c517e73c19c5d}
-      \strng{fullhash}{10f004e08c7c03d98be0da1231a869ce}
-      \strng{fullhashraw}{10f004e08c7c03d98be0da1231a869ce}
-      \strng{bibnamehash}{f72f4e4062a86380ff2bb557dd45ddba}
-      \strng{authorbibnamehash}{f72f4e4062a86380ff2bb557dd45ddba}
-      \strng{authornamehash}{c251cdfd036d9474565c517e73c19c5d}
-      \strng{authorfullhash}{10f004e08c7c03d98be0da1231a869ce}
-      \strng{authorfullhashraw}{10f004e08c7c03d98be0da1231a869ce}
-      \strng{nameabibnamehash}{f72f4e4062a86380ff2bb557dd45ddba}
-      \strng{nameanamehash}{c251cdfd036d9474565c517e73c19c5d}
-      \strng{nameafullhash}{10f004e08c7c03d98be0da1231a869ce}
-      \strng{nameafullhashraw}{10f004e08c7c03d98be0da1231a869ce}
-      \field{sortinit}{2}
-      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \strng{namehash}{7a6b97078315e7ad1892b0d545e86163}
+      \strng{fullhash}{37c71c03710f1cbdeee3a3816d638d7b}
+      \strng{fullhashraw}{37c71c03710f1cbdeee3a3816d638d7b}
+      \strng{bibnamehash}{01173f968ee1d22ba0ad55617a15fdf4}
+      \strng{authorbibnamehash}{01173f968ee1d22ba0ad55617a15fdf4}
+      \strng{authornamehash}{7a6b97078315e7ad1892b0d545e86163}
+      \strng{authorfullhash}{37c71c03710f1cbdeee3a3816d638d7b}
+      \strng{authorfullhashraw}{37c71c03710f1cbdeee3a3816d638d7b}
+      \strng{nameabibnamehash}{01173f968ee1d22ba0ad55617a15fdf4}
+      \strng{nameanamehash}{7a6b97078315e7ad1892b0d545e86163}
+      \strng{nameafullhash}{37c71c03710f1cbdeee3a3816d638d7b}
+      \strng{nameafullhashraw}{37c71c03710f1cbdeee3a3816d638d7b}
+      \field{sortinit}{4}
+      \field{sortinithash}{9381316451d1b9788675a07e972a12a7}
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
-      \field{edition}{3}
+      \field{booktitle}{Proceedings of the {ACM} {SIGMOD} International Conference on Management of Data}
       \field{langid}{english}
       \field{languageid}{english}
       \field{lansortorder}{4}
-      \field{title}{Introduction to Algorithms}
-      \field{usera}{M}
+      \field{number}{1}
+      \field{series}{Proceedings of the {ACM} on Management of Data}
+      \field{title}{{IcebergHT}: High Performance Hash Tables Through Stability and Low Associativity}
+      \field{usera}{C}
       \field{userd}{english}
       \field{userf}{english}
-      \field{year}{2009}
+      \field{volume}{1}
+      \field{year}{2023}
       \field{dateera}{ce}
-      \keyw{cormen2009introduction}
+      \field{pages}{47:1\bibrangedash 47:26}
+      \range{pages}{-1}
+      \verb{doi}
+      \verb 10.1145/3588727
+      \endverb
+      \keyw{pandey2023iceberght}
+    \endentry
+    \entry{pagh2008retrieval}{inproceedings}{}{}
+      \name{author}{2}{}{%
+        {{hash=b3729237385542cc130552f38ee83186}{%
+           family={Dietzfelbinger},
+           familyi={D\bibinitperiod},
+           given={Martin},
+           giveni={M\bibinitperiod}}}%
+        {{hash=88974e5158546cc2704aa597baa5ac09}{%
+           family={Pagh},
+           familyi={P\bibinitperiod},
+           given={Rasmus},
+           giveni={R\bibinitperiod}}}%
+      }
+      \name{namea}{2}{}{%
+        {{hash=b3729237385542cc130552f38ee83186}{%
+           family={Dietzfelbinger},
+           familyi={D\bibinitperiod},
+           given={Martin},
+           giveni={M\bibinitperiod}}}%
+        {{hash=88974e5158546cc2704aa597baa5ac09}{%
+           family={Pagh},
+           familyi={P\bibinitperiod},
+           given={Rasmus},
+           giveni={R\bibinitperiod}}}%
+      }
+      \list{language}{1}{%
+        {english}%
+      }
+      \list{publisher}{1}{%
+        {Springer}%
+      }
+      \strng{namehash}{e14bff73618943a5f6c83979220bb048}
+      \strng{fullhash}{41e709125b4b05534c747e452f693a34}
+      \strng{fullhashraw}{41e709125b4b05534c747e452f693a34}
+      \strng{bibnamehash}{41e709125b4b05534c747e452f693a34}
+      \strng{authorbibnamehash}{41e709125b4b05534c747e452f693a34}
+      \strng{authornamehash}{e14bff73618943a5f6c83979220bb048}
+      \strng{authorfullhash}{41e709125b4b05534c747e452f693a34}
+      \strng{authorfullhashraw}{41e709125b4b05534c747e452f693a34}
+      \strng{nameabibnamehash}{41e709125b4b05534c747e452f693a34}
+      \strng{nameanamehash}{e14bff73618943a5f6c83979220bb048}
+      \strng{nameafullhash}{41e709125b4b05534c747e452f693a34}
+      \strng{nameafullhashraw}{41e709125b4b05534c747e452f693a34}
+      \field{sortinit}{5}
+      \field{sortinithash}{20e9b4b0b173788c5dace24730f47d8c}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{Proceedings of the 35th International Colloquium on Automata, Languages, and Programming ({ICALP} 2008)}
+      \field{langid}{english}
+      \field{languageid}{english}
+      \field{lansortorder}{4}
+      \field{series}{Lecture Notes in Computer Science}
+      \field{title}{Succinct Data Structures for Retrieval and Approximate Membership}
+      \field{usera}{C}
+      \field{userd}{english}
+      \field{userf}{english}
+      \field{volume}{5125}
+      \field{year}{2008}
+      \field{dateera}{ce}
+      \field{pages}{385\bibrangedash 396}
+      \range{pages}{12}
+      \verb{doi}
+      \verb 10.1007/11523468_30
+      \endverb
+      \keyw{pagh2008retrieval}
     \endentry
     \entry{pagh2004cuckoo}{article}{}{}
       \name{author}{2}{}{%
@@ -209,10 +605,10 @@
            familyi={P\bibinitperiod},
            given={Rasmus},
            giveni={R\bibinitperiod}}}%
-        {{hash=b878386fe7bd581d805a4865e4aa6bce}{%
+        {{hash=c50c1b65193a74ff599ec467720e4694}{%
            family={Rodler},
            familyi={R\bibinitperiod},
-           given={Flemming\bibnamedelima Friche},
+           given={Flemming\bibnamedelima F.},
            giveni={F\bibinitperiod\bibinitdelim F\bibinitperiod}}}%
       }
       \name{namea}{2}{}{%
@@ -221,29 +617,29 @@
            familyi={P\bibinitperiod},
            given={Rasmus},
            giveni={R\bibinitperiod}}}%
-        {{hash=b878386fe7bd581d805a4865e4aa6bce}{%
+        {{hash=c50c1b65193a74ff599ec467720e4694}{%
            family={Rodler},
            familyi={R\bibinitperiod},
-           given={Flemming\bibnamedelima Friche},
+           given={Flemming\bibnamedelima F.},
            giveni={F\bibinitperiod\bibinitdelim F\bibinitperiod}}}%
       }
       \list{language}{1}{%
         {english}%
       }
       \strng{namehash}{32c81af526aaa4583757f7d77c2d6b00}
-      \strng{fullhash}{aaa8deae051ea21d43f0930c98a180c6}
-      \strng{fullhashraw}{aaa8deae051ea21d43f0930c98a180c6}
-      \strng{bibnamehash}{aaa8deae051ea21d43f0930c98a180c6}
-      \strng{authorbibnamehash}{aaa8deae051ea21d43f0930c98a180c6}
+      \strng{fullhash}{026638cb164e8340ed2168a3cd08ebee}
+      \strng{fullhashraw}{026638cb164e8340ed2168a3cd08ebee}
+      \strng{bibnamehash}{026638cb164e8340ed2168a3cd08ebee}
+      \strng{authorbibnamehash}{026638cb164e8340ed2168a3cd08ebee}
       \strng{authornamehash}{32c81af526aaa4583757f7d77c2d6b00}
-      \strng{authorfullhash}{aaa8deae051ea21d43f0930c98a180c6}
-      \strng{authorfullhashraw}{aaa8deae051ea21d43f0930c98a180c6}
-      \strng{nameabibnamehash}{aaa8deae051ea21d43f0930c98a180c6}
+      \strng{authorfullhash}{026638cb164e8340ed2168a3cd08ebee}
+      \strng{authorfullhashraw}{026638cb164e8340ed2168a3cd08ebee}
+      \strng{nameabibnamehash}{026638cb164e8340ed2168a3cd08ebee}
       \strng{nameanamehash}{32c81af526aaa4583757f7d77c2d6b00}
-      \strng{nameafullhash}{aaa8deae051ea21d43f0930c98a180c6}
-      \strng{nameafullhashraw}{aaa8deae051ea21d43f0930c98a180c6}
-      \field{sortinit}{3}
-      \field{sortinithash}{ad6fe7482ffbd7b9f99c9e8b5dccd3d7}
+      \strng{nameafullhash}{026638cb164e8340ed2168a3cd08ebee}
+      \strng{nameafullhashraw}{026638cb164e8340ed2168a3cd08ebee}
+      \field{sortinit}{7}
+      \field{sortinithash}{108d0be1b1bee9773a1173443802c0a3}
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
       \field{journaltitle}{Journal of Algorithms}
@@ -261,82 +657,668 @@
       \field{pages}{122\bibrangedash 144}
       \range{pages}{23}
       \verb{doi}
-      \verb 10.1016/j.jalgor.2003.12.002
+      \verb 10.1016/j.jalgor.2004.03.002
       \endverb
       \keyw{pagh2004cuckoo}
     \endentry
-    \entry{fredman1984sparse}{article}{}{}
+    \entry{lehmann2023sichash}{inproceedings}{}{}
       \name{author}{3}{}{%
-        {{hash=87928bfac08fafcf3e80defe20fa4b2f}{%
-           family={Fredman},
-           familyi={F\bibinitperiod},
-           given={Michael\bibnamedelima L.},
-           giveni={M\bibinitperiod\bibinitdelim L\bibinitperiod}}}%
-        {{hash=3756019aaa8edc42f2cf872c9850284c}{%
-           family={Komlós},
-           familyi={K\bibinitperiod},
-           given={János},
-           giveni={J\bibinitperiod}}}%
-        {{hash=11eac7d5df5a432005f8b6395c03384c}{%
-           family={Szemerédi},
+        {{hash=4583afa50009d0f0f5c3b26637ef3cae}{%
+           family={Lehmann},
+           familyi={L\bibinitperiod},
+           given={Hans-Peter},
+           giveni={H\bibinithyphendelim P\bibinitperiod}}}%
+        {{hash=be6c7f12620ef1a8d1d85d96d476a158}{%
+           family={Sanders},
            familyi={S\bibinitperiod},
-           given={Endre},
-           giveni={E\bibinitperiod}}}%
+           given={Peter},
+           giveni={P\bibinitperiod}}}%
+        {{hash=17a9ed6e8bcb6bacb4bdade7da976216}{%
+           family={Walzer},
+           familyi={W\bibinitperiod},
+           given={Stefan},
+           giveni={S\bibinitperiod}}}%
       }
       \name{namea}{3}{}{%
-        {{hash=87928bfac08fafcf3e80defe20fa4b2f}{%
-           family={Fredman},
-           familyi={F\bibinitperiod},
-           given={Michael\bibnamedelima L.},
-           giveni={M\bibinitperiod\bibinitdelim L\bibinitperiod}}}%
-        {{hash=3756019aaa8edc42f2cf872c9850284c}{%
-           family={Komlós},
-           familyi={K\bibinitperiod},
-           given={János},
-           giveni={J\bibinitperiod}}}%
-        {{hash=11eac7d5df5a432005f8b6395c03384c}{%
-           family={Szemerédi},
+        {{hash=4583afa50009d0f0f5c3b26637ef3cae}{%
+           family={Lehmann},
+           familyi={L\bibinitperiod},
+           given={Hans-Peter},
+           giveni={H\bibinithyphendelim P\bibinitperiod}}}%
+        {{hash=be6c7f12620ef1a8d1d85d96d476a158}{%
+           family={Sanders},
            familyi={S\bibinitperiod},
-           given={Endre},
-           giveni={E\bibinitperiod}}}%
+           given={Peter},
+           giveni={P\bibinitperiod}}}%
+        {{hash=17a9ed6e8bcb6bacb4bdade7da976216}{%
+           family={Walzer},
+           familyi={W\bibinitperiod},
+           given={Stefan},
+           giveni={S\bibinitperiod}}}%
       }
       \list{language}{1}{%
         {english}%
       }
-      \strng{namehash}{ee37760ea41a769f54a869794f6fe5aa}
-      \strng{fullhash}{064f6e537115d64b00776a509519a562}
-      \strng{fullhashraw}{064f6e537115d64b00776a509519a562}
-      \strng{bibnamehash}{064f6e537115d64b00776a509519a562}
-      \strng{authorbibnamehash}{064f6e537115d64b00776a509519a562}
-      \strng{authornamehash}{ee37760ea41a769f54a869794f6fe5aa}
-      \strng{authorfullhash}{064f6e537115d64b00776a509519a562}
-      \strng{authorfullhashraw}{064f6e537115d64b00776a509519a562}
-      \strng{nameabibnamehash}{064f6e537115d64b00776a509519a562}
-      \strng{nameanamehash}{ee37760ea41a769f54a869794f6fe5aa}
-      \strng{nameafullhash}{064f6e537115d64b00776a509519a562}
-      \strng{nameafullhashraw}{064f6e537115d64b00776a509519a562}
-      \field{sortinit}{4}
-      \field{sortinithash}{9381316451d1b9788675a07e972a12a7}
+      \list{publisher}{1}{%
+        {SIAM}%
+      }
+      \strng{namehash}{515f660e855acf8d19c14b87c485346c}
+      \strng{fullhash}{2b2a9752f439fe9c2fcbc9842421f96c}
+      \strng{fullhashraw}{2b2a9752f439fe9c2fcbc9842421f96c}
+      \strng{bibnamehash}{2b2a9752f439fe9c2fcbc9842421f96c}
+      \strng{authorbibnamehash}{2b2a9752f439fe9c2fcbc9842421f96c}
+      \strng{authornamehash}{515f660e855acf8d19c14b87c485346c}
+      \strng{authorfullhash}{2b2a9752f439fe9c2fcbc9842421f96c}
+      \strng{authorfullhashraw}{2b2a9752f439fe9c2fcbc9842421f96c}
+      \strng{nameabibnamehash}{2b2a9752f439fe9c2fcbc9842421f96c}
+      \strng{nameanamehash}{515f660e855acf8d19c14b87c485346c}
+      \strng{nameafullhash}{2b2a9752f439fe9c2fcbc9842421f96c}
+      \strng{nameafullhashraw}{2b2a9752f439fe9c2fcbc9842421f96c}
+      \field{extraname}{1}
+      \field{sortinit}{7}
+      \field{sortinithash}{108d0be1b1bee9773a1173443802c0a3}
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
-      \field{journaltitle}{Journal of the ACM}
+      \field{booktitle}{Proceedings of the Symposium on Algorithm Engineering and Experiments ({ALENEX} 2023)}
       \field{langid}{english}
       \field{languageid}{english}
       \field{lansortorder}{4}
-      \field{number}{3}
-      \field{title}{Storing a Sparse Table with $O(1)$ Worst Case Access Time}
+      \field{title}{{SicHash} -- Small Irregular Cuckoo Tables for Perfect Hashing}
+      \field{usera}{C}
+      \field{userd}{english}
+      \field{userf}{english}
+      \field{year}{2023}
+      \field{dateera}{ce}
+      \field{pages}{176\bibrangedash 189}
+      \range{pages}{14}
+      \verb{doi}
+      \verb 10.1137/1.9781611977561.ch15
+      \endverb
+      \keyw{lehmann2023sichash}
+    \endentry
+    \entry{lehmann2026mphsurvey}{article}{}{}
+      \name{author}{7}{}{%
+        {{hash=4583afa50009d0f0f5c3b26637ef3cae}{%
+           family={Lehmann},
+           familyi={L\bibinitperiod},
+           given={Hans-Peter},
+           giveni={H\bibinithyphendelim P\bibinitperiod}}}%
+        {{hash=c2ad285eb682bccdfe2685694db2188f}{%
+           family={Müller},
+           familyi={M\bibinitperiod},
+           given={Thomas},
+           giveni={T\bibinitperiod}}}%
+        {{hash=88974e5158546cc2704aa597baa5ac09}{%
+           family={Pagh},
+           familyi={P\bibinitperiod},
+           given={Rasmus},
+           giveni={R\bibinitperiod}}}%
+        {{hash=8de7cec561835acb49c3df3423959d47}{%
+           family={Pibiri},
+           familyi={P\bibinitperiod},
+           given={Giulio\bibnamedelima Ermanno},
+           giveni={G\bibinitperiod\bibinitdelim E\bibinitperiod}}}%
+        {{hash=be6c7f12620ef1a8d1d85d96d476a158}{%
+           family={Sanders},
+           familyi={S\bibinitperiod},
+           given={Peter},
+           giveni={P\bibinitperiod}}}%
+        {{hash=fb3b77ad742e7c12096b67272f1cf7e5}{%
+           family={Vigna},
+           familyi={V\bibinitperiod},
+           given={Sebastiano},
+           giveni={S\bibinitperiod}}}%
+        {{hash=17a9ed6e8bcb6bacb4bdade7da976216}{%
+           family={Walzer},
+           familyi={W\bibinitperiod},
+           given={Stefan},
+           giveni={S\bibinitperiod}}}%
+      }
+      \name{namea}{7}{}{%
+        {{hash=4583afa50009d0f0f5c3b26637ef3cae}{%
+           family={Lehmann},
+           familyi={L\bibinitperiod},
+           given={Hans-Peter},
+           giveni={H\bibinithyphendelim P\bibinitperiod}}}%
+        {{hash=c2ad285eb682bccdfe2685694db2188f}{%
+           family={Müller},
+           familyi={M\bibinitperiod},
+           given={Thomas},
+           giveni={T\bibinitperiod}}}%
+        {{hash=88974e5158546cc2704aa597baa5ac09}{%
+           family={Pagh},
+           familyi={P\bibinitperiod},
+           given={Rasmus},
+           giveni={R\bibinitperiod}}}%
+        {{hash=8de7cec561835acb49c3df3423959d47}{%
+           family={Pibiri},
+           familyi={P\bibinitperiod},
+           given={Giulio\bibnamedelima Ermanno},
+           giveni={G\bibinitperiod\bibinitdelim E\bibinitperiod}}}%
+        {{hash=be6c7f12620ef1a8d1d85d96d476a158}{%
+           family={Sanders},
+           familyi={S\bibinitperiod},
+           given={Peter},
+           giveni={P\bibinitperiod}}}%
+        {{hash=fb3b77ad742e7c12096b67272f1cf7e5}{%
+           family={Vigna},
+           familyi={V\bibinitperiod},
+           given={Sebastiano},
+           giveni={S\bibinitperiod}}}%
+        {{hash=17a9ed6e8bcb6bacb4bdade7da976216}{%
+           family={Walzer},
+           familyi={W\bibinitperiod},
+           given={Stefan},
+           giveni={S\bibinitperiod}}}%
+      }
+      \list{language}{1}{%
+        {english}%
+      }
+      \strng{namehash}{515f660e855acf8d19c14b87c485346c}
+      \strng{fullhash}{6ef8fde06efdd67f760819cb5b39fad4}
+      \strng{fullhashraw}{6ef8fde06efdd67f760819cb5b39fad4}
+      \strng{bibnamehash}{a34d219b34c71e14d05ac002d0b04f44}
+      \strng{authorbibnamehash}{a34d219b34c71e14d05ac002d0b04f44}
+      \strng{authornamehash}{515f660e855acf8d19c14b87c485346c}
+      \strng{authorfullhash}{6ef8fde06efdd67f760819cb5b39fad4}
+      \strng{authorfullhashraw}{6ef8fde06efdd67f760819cb5b39fad4}
+      \strng{nameabibnamehash}{a34d219b34c71e14d05ac002d0b04f44}
+      \strng{nameanamehash}{515f660e855acf8d19c14b87c485346c}
+      \strng{nameafullhash}{6ef8fde06efdd67f760819cb5b39fad4}
+      \strng{nameafullhashraw}{6ef8fde06efdd67f760819cb5b39fad4}
+      \field{extraname}{2}
+      \field{sortinit}{8}
+      \field{sortinithash}{a231b008ebf0ecbe0b4d96dcc159445f}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{{ACM} Computing Surveys}
+      \field{langid}{english}
+      \field{languageid}{english}
+      \field{lansortorder}{4}
+      \field{number}{10}
+      \field{title}{Modern Minimal Perfect Hashing: A Survey}
       \field{usera}{J}
       \field{userd}{english}
       \field{userf}{english}
-      \field{volume}{31}
-      \field{year}{1984}
+      \field{volume}{58}
+      \field{year}{2026}
       \field{dateera}{ce}
-      \field{pages}{538\bibrangedash 544}
-      \range{pages}{7}
+      \field{pages}{251:1\bibrangedash 251:36}
+      \range{pages}{-1}
       \verb{doi}
-      \verb 10.1145/828.1884
+      \verb 10.1145/3797036
       \endverb
-      \keyw{fredman1984sparse}
+      \keyw{lehmann2026mphsurvey}
+    \endentry
+    \entry{lehmann2024shockhash}{inproceedings}{}{}
+      \name{author}{3}{}{%
+        {{hash=4583afa50009d0f0f5c3b26637ef3cae}{%
+           family={Lehmann},
+           familyi={L\bibinitperiod},
+           given={Hans-Peter},
+           giveni={H\bibinithyphendelim P\bibinitperiod}}}%
+        {{hash=be6c7f12620ef1a8d1d85d96d476a158}{%
+           family={Sanders},
+           familyi={S\bibinitperiod},
+           given={Peter},
+           giveni={P\bibinitperiod}}}%
+        {{hash=17a9ed6e8bcb6bacb4bdade7da976216}{%
+           family={Walzer},
+           familyi={W\bibinitperiod},
+           given={Stefan},
+           giveni={S\bibinitperiod}}}%
+      }
+      \name{namea}{3}{}{%
+        {{hash=4583afa50009d0f0f5c3b26637ef3cae}{%
+           family={Lehmann},
+           familyi={L\bibinitperiod},
+           given={Hans-Peter},
+           giveni={H\bibinithyphendelim P\bibinitperiod}}}%
+        {{hash=be6c7f12620ef1a8d1d85d96d476a158}{%
+           family={Sanders},
+           familyi={S\bibinitperiod},
+           given={Peter},
+           giveni={P\bibinitperiod}}}%
+        {{hash=17a9ed6e8bcb6bacb4bdade7da976216}{%
+           family={Walzer},
+           familyi={W\bibinitperiod},
+           given={Stefan},
+           giveni={S\bibinitperiod}}}%
+      }
+      \list{language}{1}{%
+        {english}%
+      }
+      \list{publisher}{1}{%
+        {SIAM}%
+      }
+      \strng{namehash}{515f660e855acf8d19c14b87c485346c}
+      \strng{fullhash}{2b2a9752f439fe9c2fcbc9842421f96c}
+      \strng{fullhashraw}{2b2a9752f439fe9c2fcbc9842421f96c}
+      \strng{bibnamehash}{2b2a9752f439fe9c2fcbc9842421f96c}
+      \strng{authorbibnamehash}{2b2a9752f439fe9c2fcbc9842421f96c}
+      \strng{authornamehash}{515f660e855acf8d19c14b87c485346c}
+      \strng{authorfullhash}{2b2a9752f439fe9c2fcbc9842421f96c}
+      \strng{authorfullhashraw}{2b2a9752f439fe9c2fcbc9842421f96c}
+      \strng{nameabibnamehash}{2b2a9752f439fe9c2fcbc9842421f96c}
+      \strng{nameanamehash}{515f660e855acf8d19c14b87c485346c}
+      \strng{nameafullhash}{2b2a9752f439fe9c2fcbc9842421f96c}
+      \strng{nameafullhashraw}{2b2a9752f439fe9c2fcbc9842421f96c}
+      \field{extraname}{3}
+      \field{sortinit}{8}
+      \field{sortinithash}{a231b008ebf0ecbe0b4d96dcc159445f}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{Proceedings of the Symposium on Algorithm Engineering and Experiments ({ALENEX} 2024)}
+      \field{langid}{english}
+      \field{languageid}{english}
+      \field{lansortorder}{4}
+      \field{title}{{ShockHash}: Towards Optimal-Space Minimal Perfect Hashing Beyond Brute-Force}
+      \field{usera}{C}
+      \field{userd}{english}
+      \field{userf}{english}
+      \field{year}{2024}
+      \field{dateera}{ce}
+      \field{pages}{194\bibrangedash 206}
+      \range{pages}{13}
+      \verb{doi}
+      \verb 10.1137/1.9781611977929.15
+      \endverb
+      \keyw{lehmann2024shockhash}
+    \endentry
+    \entry{hermann2024phobic}{inproceedings}{}{}
+      \name{author}{5}{}{%
+        {{hash=b32b8c16abcc88ce35e3671dd7508cc9}{%
+           family={Hermann},
+           familyi={H\bibinitperiod},
+           given={Stefan},
+           giveni={S\bibinitperiod}}}%
+        {{hash=4583afa50009d0f0f5c3b26637ef3cae}{%
+           family={Lehmann},
+           familyi={L\bibinitperiod},
+           given={Hans-Peter},
+           giveni={H\bibinithyphendelim P\bibinitperiod}}}%
+        {{hash=8de7cec561835acb49c3df3423959d47}{%
+           family={Pibiri},
+           familyi={P\bibinitperiod},
+           given={Giulio\bibnamedelima Ermanno},
+           giveni={G\bibinitperiod\bibinitdelim E\bibinitperiod}}}%
+        {{hash=be6c7f12620ef1a8d1d85d96d476a158}{%
+           family={Sanders},
+           familyi={S\bibinitperiod},
+           given={Peter},
+           giveni={P\bibinitperiod}}}%
+        {{hash=17a9ed6e8bcb6bacb4bdade7da976216}{%
+           family={Walzer},
+           familyi={W\bibinitperiod},
+           given={Stefan},
+           giveni={S\bibinitperiod}}}%
+      }
+      \name{namea}{5}{}{%
+        {{hash=b32b8c16abcc88ce35e3671dd7508cc9}{%
+           family={Hermann},
+           familyi={H\bibinitperiod},
+           given={Stefan},
+           giveni={S\bibinitperiod}}}%
+        {{hash=4583afa50009d0f0f5c3b26637ef3cae}{%
+           family={Lehmann},
+           familyi={L\bibinitperiod},
+           given={Hans-Peter},
+           giveni={H\bibinithyphendelim P\bibinitperiod}}}%
+        {{hash=8de7cec561835acb49c3df3423959d47}{%
+           family={Pibiri},
+           familyi={P\bibinitperiod},
+           given={Giulio\bibnamedelima Ermanno},
+           giveni={G\bibinitperiod\bibinitdelim E\bibinitperiod}}}%
+        {{hash=be6c7f12620ef1a8d1d85d96d476a158}{%
+           family={Sanders},
+           familyi={S\bibinitperiod},
+           given={Peter},
+           giveni={P\bibinitperiod}}}%
+        {{hash=17a9ed6e8bcb6bacb4bdade7da976216}{%
+           family={Walzer},
+           familyi={W\bibinitperiod},
+           given={Stefan},
+           giveni={S\bibinitperiod}}}%
+      }
+      \list{language}{1}{%
+        {english}%
+      }
+      \list{publisher}{1}{%
+        {Schloss Dagstuhl -- Leibniz-Zentrum für Informatik}%
+      }
+      \strng{namehash}{45854883a3f4f038236588846f412d68}
+      \strng{fullhash}{815d896fe0091b50f6603821b310ae57}
+      \strng{fullhashraw}{815d896fe0091b50f6603821b310ae57}
+      \strng{bibnamehash}{1c25408652f426708ecd6196bad7a180}
+      \strng{authorbibnamehash}{1c25408652f426708ecd6196bad7a180}
+      \strng{authornamehash}{45854883a3f4f038236588846f412d68}
+      \strng{authorfullhash}{815d896fe0091b50f6603821b310ae57}
+      \strng{authorfullhashraw}{815d896fe0091b50f6603821b310ae57}
+      \strng{nameabibnamehash}{1c25408652f426708ecd6196bad7a180}
+      \strng{nameanamehash}{45854883a3f4f038236588846f412d68}
+      \strng{nameafullhash}{815d896fe0091b50f6603821b310ae57}
+      \strng{nameafullhashraw}{815d896fe0091b50f6603821b310ae57}
+      \field{sortinit}{8}
+      \field{sortinithash}{a231b008ebf0ecbe0b4d96dcc159445f}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{Proceedings of the 32nd Annual European Symposium on Algorithms ({ESA} 2024)}
+      \field{langid}{english}
+      \field{languageid}{english}
+      \field{lansortorder}{4}
+      \field{series}{LIPIcs}
+      \field{title}{{PHOBIC}: Perfect Hashing with Optimized Bucket Sizes and Interleaved Coding}
+      \field{usera}{C}
+      \field{userd}{english}
+      \field{userf}{english}
+      \field{volume}{308}
+      \field{year}{2024}
+      \field{dateera}{ce}
+      \field{pages}{69:1\bibrangedash 69:17}
+      \range{pages}{-1}
+      \verb{doi}
+      \verb 10.4230/LIPIcs.ESA.2024.69
+      \endverb
+      \keyw{hermann2024phobic}
+    \endentry
+    \entry{lehmann2025combined}{inproceedings}{}{}
+      \name{author}{4}{}{%
+        {{hash=4583afa50009d0f0f5c3b26637ef3cae}{%
+           family={Lehmann},
+           familyi={L\bibinitperiod},
+           given={Hans-Peter},
+           giveni={H\bibinithyphendelim P\bibinitperiod}}}%
+        {{hash=be6c7f12620ef1a8d1d85d96d476a158}{%
+           family={Sanders},
+           familyi={S\bibinitperiod},
+           given={Peter},
+           giveni={P\bibinitperiod}}}%
+        {{hash=17a9ed6e8bcb6bacb4bdade7da976216}{%
+           family={Walzer},
+           familyi={W\bibinitperiod},
+           given={Stefan},
+           giveni={S\bibinitperiod}}}%
+        {{hash=bfbb6290dd14849bf63d087dc4b5ff43}{%
+           family={Ziegler},
+           familyi={Z\bibinitperiod},
+           given={Jonatan},
+           giveni={J\bibinitperiod}}}%
+      }
+      \name{namea}{4}{}{%
+        {{hash=4583afa50009d0f0f5c3b26637ef3cae}{%
+           family={Lehmann},
+           familyi={L\bibinitperiod},
+           given={Hans-Peter},
+           giveni={H\bibinithyphendelim P\bibinitperiod}}}%
+        {{hash=be6c7f12620ef1a8d1d85d96d476a158}{%
+           family={Sanders},
+           familyi={S\bibinitperiod},
+           given={Peter},
+           giveni={P\bibinitperiod}}}%
+        {{hash=17a9ed6e8bcb6bacb4bdade7da976216}{%
+           family={Walzer},
+           familyi={W\bibinitperiod},
+           given={Stefan},
+           giveni={S\bibinitperiod}}}%
+        {{hash=bfbb6290dd14849bf63d087dc4b5ff43}{%
+           family={Ziegler},
+           familyi={Z\bibinitperiod},
+           given={Jonatan},
+           giveni={J\bibinitperiod}}}%
+      }
+      \list{language}{1}{%
+        {english}%
+      }
+      \list{publisher}{1}{%
+        {Schloss Dagstuhl -- Leibniz-Zentrum für Informatik}%
+      }
+      \strng{namehash}{515f660e855acf8d19c14b87c485346c}
+      \strng{fullhash}{69103b17d1a03499fae02a865829aa6e}
+      \strng{fullhashraw}{69103b17d1a03499fae02a865829aa6e}
+      \strng{bibnamehash}{999a214b674fa97db8216261970e0d73}
+      \strng{authorbibnamehash}{999a214b674fa97db8216261970e0d73}
+      \strng{authornamehash}{515f660e855acf8d19c14b87c485346c}
+      \strng{authorfullhash}{69103b17d1a03499fae02a865829aa6e}
+      \strng{authorfullhashraw}{69103b17d1a03499fae02a865829aa6e}
+      \strng{nameabibnamehash}{999a214b674fa97db8216261970e0d73}
+      \strng{nameanamehash}{515f660e855acf8d19c14b87c485346c}
+      \strng{nameafullhash}{69103b17d1a03499fae02a865829aa6e}
+      \strng{nameafullhashraw}{69103b17d1a03499fae02a865829aa6e}
+      \field{extraname}{4}
+      \field{sortinit}{9}
+      \field{sortinithash}{0a5ebc79d83c96b6579069544c73c7d4}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{Proceedings of the 33rd Annual European Symposium on Algorithms ({ESA} 2025)}
+      \field{langid}{english}
+      \field{languageid}{english}
+      \field{lansortorder}{4}
+      \field{series}{LIPIcs}
+      \field{title}{Combined Search and Encoding for Seeds, with an Application to Minimal Perfect Hashing}
+      \field{usera}{C}
+      \field{userd}{english}
+      \field{userf}{english}
+      \field{volume}{351}
+      \field{year}{2025}
+      \field{dateera}{ce}
+      \field{pages}{109:1\bibrangedash 109:18}
+      \range{pages}{-1}
+      \verb{doi}
+      \verb 10.4230/LIPIcs.ESA.2025.109
+      \endverb
+      \keyw{lehmann2025combined}
+    \endentry
+    \entry{kurpicz2023pachash}{inproceedings}{}{}
+      \name{author}{3}{}{%
+        {{hash=6c016101e6ba5ce306363e289efe9c20}{%
+           family={Kurpicz},
+           familyi={K\bibinitperiod},
+           given={Florian},
+           giveni={F\bibinitperiod}}}%
+        {{hash=4583afa50009d0f0f5c3b26637ef3cae}{%
+           family={Lehmann},
+           familyi={L\bibinitperiod},
+           given={Hans-Peter},
+           giveni={H\bibinithyphendelim P\bibinitperiod}}}%
+        {{hash=be6c7f12620ef1a8d1d85d96d476a158}{%
+           family={Sanders},
+           familyi={S\bibinitperiod},
+           given={Peter},
+           giveni={P\bibinitperiod}}}%
+      }
+      \name{namea}{3}{}{%
+        {{hash=6c016101e6ba5ce306363e289efe9c20}{%
+           family={Kurpicz},
+           familyi={K\bibinitperiod},
+           given={Florian},
+           giveni={F\bibinitperiod}}}%
+        {{hash=4583afa50009d0f0f5c3b26637ef3cae}{%
+           family={Lehmann},
+           familyi={L\bibinitperiod},
+           given={Hans-Peter},
+           giveni={H\bibinithyphendelim P\bibinitperiod}}}%
+        {{hash=be6c7f12620ef1a8d1d85d96d476a158}{%
+           family={Sanders},
+           familyi={S\bibinitperiod},
+           given={Peter},
+           giveni={P\bibinitperiod}}}%
+      }
+      \list{language}{1}{%
+        {english}%
+      }
+      \list{publisher}{1}{%
+        {SIAM}%
+      }
+      \strng{namehash}{db9630cdd980d4f95dc474ef14dd6b3a}
+      \strng{fullhash}{1cc479d1158493c9c96bb31b3bb819f7}
+      \strng{fullhashraw}{1cc479d1158493c9c96bb31b3bb819f7}
+      \strng{bibnamehash}{1cc479d1158493c9c96bb31b3bb819f7}
+      \strng{authorbibnamehash}{1cc479d1158493c9c96bb31b3bb819f7}
+      \strng{authornamehash}{db9630cdd980d4f95dc474ef14dd6b3a}
+      \strng{authorfullhash}{1cc479d1158493c9c96bb31b3bb819f7}
+      \strng{authorfullhashraw}{1cc479d1158493c9c96bb31b3bb819f7}
+      \strng{nameabibnamehash}{1cc479d1158493c9c96bb31b3bb819f7}
+      \strng{nameanamehash}{db9630cdd980d4f95dc474ef14dd6b3a}
+      \strng{nameafullhash}{1cc479d1158493c9c96bb31b3bb819f7}
+      \strng{nameafullhashraw}{1cc479d1158493c9c96bb31b3bb819f7}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{Proceedings of the Symposium on Algorithm Engineering and Experiments ({ALENEX} 2023)}
+      \field{langid}{english}
+      \field{languageid}{english}
+      \field{lansortorder}{4}
+      \field{title}{{PaCHash}: Packed and Compressed Hash Tables}
+      \field{usera}{C}
+      \field{userd}{english}
+      \field{userf}{english}
+      \field{year}{2023}
+      \field{dateera}{ce}
+      \field{pages}{162\bibrangedash 175}
+      \range{pages}{14}
+      \verb{doi}
+      \verb 10.1137/1.9781611977561.ch14
+      \endverb
+      \keyw{kurpicz2023pachash}
+    \endentry
+    \entry{aamand2021dynamic}{inproceedings}{}{}
+      \name{author}{3}{}{%
+        {{hash=7b7e6042aee9cf7bc179cf1b9c910bc9}{%
+           family={Aamand},
+           familyi={A\bibinitperiod},
+           given={Anders},
+           giveni={A\bibinitperiod}}}%
+        {{hash=f9197c51f860fe263a178b486f26feef}{%
+           family={Knudsen},
+           familyi={K\bibinitperiod},
+           given={Jakob\bibnamedelimb B{æ}k\bibnamedelima Tejs},
+           giveni={J\bibinitperiod\bibinitdelim B\bibinitperiod\bibinitdelim T\bibinitperiod}}}%
+        {{hash=da8de8904d487b343a6b7f3a39674fb6}{%
+           family={Thorup},
+           familyi={T\bibinitperiod},
+           given={Mikkel},
+           giveni={M\bibinitperiod}}}%
+      }
+      \name{namea}{3}{}{%
+        {{hash=7b7e6042aee9cf7bc179cf1b9c910bc9}{%
+           family={Aamand},
+           familyi={A\bibinitperiod},
+           given={Anders},
+           giveni={A\bibinitperiod}}}%
+        {{hash=f9197c51f860fe263a178b486f26feef}{%
+           family={Knudsen},
+           familyi={K\bibinitperiod},
+           given={Jakob\bibnamedelimb B{æ}k\bibnamedelima Tejs},
+           giveni={J\bibinitperiod\bibinitdelim B\bibinitperiod\bibinitdelim T\bibinitperiod}}}%
+        {{hash=da8de8904d487b343a6b7f3a39674fb6}{%
+           family={Thorup},
+           familyi={T\bibinitperiod},
+           given={Mikkel},
+           giveni={M\bibinitperiod}}}%
+      }
+      \list{language}{1}{%
+        {english}%
+      }
+      \list{publisher}{1}{%
+        {ACM}%
+      }
+      \strng{namehash}{95a5253298ce290225e7a96f1f549319}
+      \strng{fullhash}{1ef6d018d73bf2ae4789e0aab4959337}
+      \strng{fullhashraw}{1ef6d018d73bf2ae4789e0aab4959337}
+      \strng{bibnamehash}{1ef6d018d73bf2ae4789e0aab4959337}
+      \strng{authorbibnamehash}{1ef6d018d73bf2ae4789e0aab4959337}
+      \strng{authornamehash}{95a5253298ce290225e7a96f1f549319}
+      \strng{authorfullhash}{1ef6d018d73bf2ae4789e0aab4959337}
+      \strng{authorfullhashraw}{1ef6d018d73bf2ae4789e0aab4959337}
+      \strng{nameabibnamehash}{1ef6d018d73bf2ae4789e0aab4959337}
+      \strng{nameanamehash}{95a5253298ce290225e7a96f1f549319}
+      \strng{nameafullhash}{1ef6d018d73bf2ae4789e0aab4959337}
+      \strng{nameafullhashraw}{1ef6d018d73bf2ae4789e0aab4959337}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{Proceedings of the 53rd Annual {ACM} {SIGACT} Symposium on Theory of Computing ({STOC} 2021)}
+      \field{langid}{english}
+      \field{languageid}{english}
+      \field{lansortorder}{4}
+      \field{title}{Load Balancing with Dynamic Set of Balls and Bins}
+      \field{usera}{C}
+      \field{userd}{english}
+      \field{userf}{english}
+      \field{year}{2021}
+      \field{dateera}{ce}
+      \field{pages}{1262\bibrangedash 1275}
+      \range{pages}{14}
+      \verb{doi}
+      \verb 10.1145/3406325.3451107
+      \endverb
+      \keyw{aamand2021dynamic}
+    \endentry
+    \entry{bansal2022deletions}{inproceedings}{}{}
+      \name{author}{2}{}{%
+        {{hash=e5933a3896c092918084907295ad0307}{%
+           family={Bansal},
+           familyi={B\bibinitperiod},
+           given={Nikhil},
+           giveni={N\bibinitperiod}}}%
+        {{hash=49e21e36aed3fa8c3a0a7b61e39105a3}{%
+           family={Kuszmaul},
+           familyi={K\bibinitperiod},
+           given={William},
+           giveni={W\bibinitperiod}}}%
+      }
+      \name{namea}{2}{}{%
+        {{hash=e5933a3896c092918084907295ad0307}{%
+           family={Bansal},
+           familyi={B\bibinitperiod},
+           given={Nikhil},
+           giveni={N\bibinitperiod}}}%
+        {{hash=49e21e36aed3fa8c3a0a7b61e39105a3}{%
+           family={Kuszmaul},
+           familyi={K\bibinitperiod},
+           given={William},
+           giveni={W\bibinitperiod}}}%
+      }
+      \list{language}{1}{%
+        {english}%
+      }
+      \list{publisher}{1}{%
+        {IEEE}%
+      }
+      \strng{namehash}{183c76111e4776819838e73b2a78be6f}
+      \strng{fullhash}{f4db2769bf3abfa440f1c1562bb5831e}
+      \strng{fullhashraw}{f4db2769bf3abfa440f1c1562bb5831e}
+      \strng{bibnamehash}{f4db2769bf3abfa440f1c1562bb5831e}
+      \strng{authorbibnamehash}{f4db2769bf3abfa440f1c1562bb5831e}
+      \strng{authornamehash}{183c76111e4776819838e73b2a78be6f}
+      \strng{authorfullhash}{f4db2769bf3abfa440f1c1562bb5831e}
+      \strng{authorfullhashraw}{f4db2769bf3abfa440f1c1562bb5831e}
+      \strng{nameabibnamehash}{f4db2769bf3abfa440f1c1562bb5831e}
+      \strng{nameanamehash}{183c76111e4776819838e73b2a78be6f}
+      \strng{nameafullhash}{f4db2769bf3abfa440f1c1562bb5831e}
+      \strng{nameafullhashraw}{f4db2769bf3abfa440f1c1562bb5831e}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{Proceedings of the 63rd {IEEE} Annual Symposium on Foundations of Computer Science ({FOCS} 2022)}
+      \field{langid}{english}
+      \field{languageid}{english}
+      \field{lansortorder}{4}
+      \field{title}{Balanced Allocations: The Heavily Loaded Case with Deletions}
+      \field{usera}{C}
+      \field{userd}{english}
+      \field{userf}{english}
+      \field{year}{2022}
+      \field{dateera}{ce}
+      \field{pages}{801\bibrangedash 812}
+      \range{pages}{12}
+      \verb{doi}
+      \verb 10.1109/FOCS54457.2022.00081
+      \endverb
+      \keyw{bansal2022deletions}
     \endentry
   \enddatalist
 \endrefsection

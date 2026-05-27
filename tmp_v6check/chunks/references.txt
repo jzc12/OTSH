@@ -1,0 +1,41 @@
+参考文献
+[1] BENDER M A, FARACH-COLTON M, KUSZMAUL J, et al. Modern Hashing
+MadeSimple[C/OL]//Proceedingsofthe2024SIAMSymposiumonSimplicity
+in Algorithms (SOSA 2024). SIAM, 2024:363-373. DOI: 10.1137/1.978161197
+7936.33.
+[2] BENDER M A, FARACH-COLTON M, KUSZMAUL J, et al. On the Optimal
+Time/Space Tradeoff for Hash Tables[C/OL]//Proceedings of the 54th Annual
+ACMSIGACTSymposiumonTheoryofComputing(STOC’22).NewYork,NY,
+USA:ACM,2022:1284-1297.DOI: 10.1145/3519935.3519969.
+[3] KUSZMAUL W, WALZER S. Space Lower Bounds for Dynamic Filters and
+Value-Dynamic Retrieval[C/OL]//Proceedings of the 56th Annual ACM Sym-
+posium on Theory of Computing (STOC 2024). ACM, 2024:1153-1164. DOI:
+10.1145/3618260.3649649.
+[4] BENDER M A, CONWAY A, FARACH-COLTON M, et al. Iceberg Hashing:
+OptimizingManyHash-TableCriteriaatOnce[J/OL].JournaloftheACM,2024,
+71(1):3:1-3:49.DOI: 10.1145/3625817.
+[5] LEHMANN H P, SANDERS P, WALZER S. SicHash – Small Irregular Cuckoo
+Tables for Perfect Hashing[C/OL]//Proceedings of the Symposium on Algo-
+rithm Engineering and Experiments (ALENEX 2023). SIAM, 2023:176-189.
+DOI: 10.1137/1.9781611977561.ch15.
+[6] LEHMANNHP,MUELLERT,PAGHR,etal.ModernMinimalPerfectHashing:
+ASurvey[J/OL].ACMComputingSurveys,2026,58(10):251:1-251:36.DOI:1
+0.1145/3797036.
+[7] PANDEY P, BENDER M A, CONWAY A, et al. IcebergHT: High Performance
+HashTablesThroughStabilityandLowAssociativity[J/OL].Proceedingsofthe
+27
+ACMonManagementofData,2023,1(1):47:1-47:26.DOI:10.1145/3588727.
+[8] AAMANDA,KNUDSENJBT,THORUPM.LoadBalancingwithDynamicSet
+ofBallsandBins[C/OL]//Proceedingsofthe53rdAnnualACMSIGACTSym-
+posium on Theory of Computing (STOC 2021). ACM, 2021:1262-1275. DOI: 1
+0.1145/3406325.3451107.
+[9] BANSAL N, KUSZMAUL W. Balanced Allocations: The Heavily Loaded Case
+with Deletions[C/OL]//Proceedings of the 63rd IEEE Annual Symposium on
+Foundations of Computer Science (FOCS 2022). IEEE, 2022:801-812. DOI: 10
+.1109/FOCS54457.2022.00081.
+28
+致 谢
+行文至此，落笔为终。感谢遇到的导师、感谢身边的每一个同学、感谢遇到
+的每一个人。凡是过往，皆为序章，很喜欢看到的一句话，人生如棋，落子无悔。
+愿我们跃入人海，各自灿烂。
+29

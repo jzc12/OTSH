@@ -33,7 +33,7 @@
     % degree = academic|professional,        % 学位类型，默认为学术型
     %
     % nl-cover,   % 是否需要国家图书馆封面，默认关闭
-    % decl-page,  % 是否需要诚信承诺书或原创性声明，默认关闭
+    decl-page,  % 是否需要诚信承诺书或原创性声明，默认关闭
     %
     %   页面模式，详见手册说明
     % draft,                  % 开启草稿模式
@@ -61,8 +61,8 @@
 \usepackage{algorithm} % 浮动体
 \usepackage{algpseudocode} % 伪代码（algorithmicx）
 \floatname{algorithm}{算法}
-\renewcommand{\algorithmicrequire}{\textbf{输入：}}
-\renewcommand{\algorithmicensure}{\textbf{输出：}}
+\renewcommand{\algorithmicrequire}{输入：}
+\renewcommand{\algorithmicensure}{输出：}
 
 % 在导言区随意定制所需命令
 % \DeclareMathOperator{\spn}{span}
@@ -85,13 +85,13 @@
 
 \begin{abstract}
 
-本论文以《OntheOptimalTime/SpaceTradeoffforHashTables》为研究方向，系统整理文中提及的理论算法及核心思想，然后加以简化并落实到实际当中，从宏观架构层面，搭建了 Facility - Cubby - Slot 三层存储体系，从而达成高效地组织和运作哈希表的目的；微观机制层面，融合了可逆哈希函数，局部查询路径，商压缩，K - Kick 规则，多层级Cubby 以及双表渐进式扩缩容迁移等主要技术，虽然有些执行过程采取了简化办法，没有完全按照最初理论模型应有的严谨程度来操作，但是整个哈希系统的功能还是齐全的，逻辑上也是连贯的，可以稳定运行。 落地的哈希系统包含初始化，插入，删除，查询，扩容以及性能指标验证等完整的操作，实验结果表明，该系统可以稳定执行各类动态操作，其路由访问步数，元素被踢出的移动次数以及元数据编码位数等关键指标均处于可控制范围内，能够精准再现原始理论架构的核心逻辑，而且，本文明确了工程简化达成与严格理论模型之间的差异界限，给类似紧凑哈希结构的工程化重现及其在实际场景中的应用赋予了有价值的参考。
+本论文以《On the Optimal Time/Space Trade off for Hash Tables》为研究方向，系统整理文中提及的理论算法及核心思想，然后加以简化并落实到实际当中，从宏观架构层面，搭建了 Facility - Cubby - Slot 三层存储体系，从而达成高效地组织和运作哈希表的目的；微观机制层面，融合了可逆哈希函数，局部查询路径，商压缩，K - Kick 规则，多层级Cubby 以及双表渐进式扩缩容迁移等主要技术，虽然有些执行过程采取了简化办法，没有完全按照最初理论模型应有的严谨程度来操作，但是整个哈希系统的功能还是齐全的，逻辑上也是连贯的，可以稳定运行。 落地的哈希系统包含初始化，插入，删除，查询，扩容以及性能指标验证等完整的操作，实验结果表明，该系统可以稳定执行各类动态操作，其路由访问步数，元素被踢出的移动次数以及元数据编码位数等关键指标均处于可控制范围内，能够精准再现原始理论架构的核心逻辑，而且，本文明确了工程简化达成与严格理论模型之间的差异界限，给类似紧凑哈希结构的工程化重现及其在实际场景中的应用赋予了有价值的参考。
 
 \end{abstract}
 
 \begin{abstract*}
 
-This thesis is built on the study of the paper \textit{*On the Optimal Time/Space Tradeoff for Hash Tables*}. It does an analysis on the theoretical algorithms and main ideas in the paper, and then tries to make them work in real engineering by using a more simple and practical way. From the overall structure point of view, a three-layer storage model made up of Facility, Cubby, and Slot is designed, which helps to manage the hash table in a more organized way. At the implementation side, the system uses many key techniques like reversible hash functions, localized query paths, quotient compression, the K-Kick rule, multi-tier Cubby organization, and incremental dual-table resizing and migration. Even though some parts are simplified and do not fully follow the strict assumptions in the original theory, the system still keeps the main framework and runs with stable logic.The built hash system can support all basic functions such as initialization, insertion, deletion, lookup, dynamic resizing, and performance testing. The experiment results show that it can handle different dynamic operations stably, and important indicators like routing probe counts, kick displacement frequency, and metadata encoding overhead are kept in acceptable levels. The implementation is able to get the core behavior of the original theoretical design in a reasonable way. Also, this work makes a discussion about the differences between the engineering simplifications used here and the pure theoretical model, which can be helpful for the practical rebuilding and use of compact hash table structures. 
+This thesis is built on the study of the paper \textit{On the Optimal Time/Space Tradeoff for Hash Tables}. It does an analysis on the theoretical algorithms and main ideas in the paper, and then tries to make them work in real engineering by using a more simple and practical way. From the overall structure point of view, a three-layer storage model made up of Facility, Cubby, and Slot is designed, which helps to manage the hash table in a more organized way. At the implementation side, the system uses many key techniques like reversible hash functions, localized query paths, quotient compression, the K-Kick rule, multi-tier Cubby organization, and incremental dual-table resizing and migration. Even though some parts are simplified and do not fully follow the strict assumptions in the original theory, the system still keeps the main framework and runs with stable logic.The built hash system can support all basic functions such as initialization, insertion, deletion, lookup, dynamic resizing, and performance testing. The experiment results show that it can handle different dynamic operations stably, and important indicators like routing probe counts, kick displacement frequency, and metadata encoding overhead are kept in acceptable levels. The implementation is able to get the core behavior of the original theoretical design in a reasonable way. Also, this work makes a discussion about the differences between the engineering simplifications used here and the pure theoretical model, which can be helpful for the practical rebuilding and use of compact hash table structures. 
 
 \end{abstract*}
 

@@ -777,7 +777,7 @@ private:
   }
 
   size_t probe_slot(uint64_t key, size_t cap, uint64_t i) const {
-    // 伪随机探针序列：splitmix64(key_bits ^ i) % cap
+    // 伪随机探测序列：splitmix64(key_bits ^ i) % cap
     // 先用 pi(key) 打散，避免 key 低位模式影响。
     const uint64_t gx = pi_.pi(key);
     const uint64_t h = splitmix64(gx ^ (i * 0x9e3779b97f4a7c15ULL));

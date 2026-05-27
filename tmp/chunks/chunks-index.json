@@ -1,0 +1,18 @@
+{
+  "chunks": [],
+  "range_map": {
+    "all-body": [],
+    "last-ch": [],
+    "ch3-end": [],
+    "design-impl": [],
+    "test-ch": [],
+    "methods-ch": [],
+    "experiment-ch": []
+  },
+  "stats": {
+    "total_chars": 0,
+    "body_chars": 0,
+    "chapter_count": 0,
+    "split_failed": true
+  }
+}

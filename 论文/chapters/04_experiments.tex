@@ -3,11 +3,11 @@
 
 \section{实验目的}
 
-本章在第三章实现路径的基础上，验证接口语义是否在批量动态操作下保持正确；分析插入、命中查询与删除时间复杂度；分析踢出移动、Router 步数、逻辑元数据位数及扩缩容次数等指标
+本章在第三章实现路径的基础上，验证接口语义是否在批量动态操作下保持正确；分析插入、命中查询与删除时间复杂度；分析踢出移动、Router 步数、逻辑元数据位数及扩缩容次数等指标。实验未与 IcebergHT\cite{pandey2023iceberght}、PaCHash\cite{kurpicz2023pachash} 等外部实现做同机对比，结论仅刻画本系统在既定参数下的行为。
 
 \section{性能实验设置}
 
-对每组参数依次执行：批量插入、顺序全命中查询、随机命中查询、删除半数键、混合命中/未命中查询；每阶段统计操作数、吞吐（ops/s）、平均延迟与 p50\footnote{p50 为 50\% 分位数，即延迟小于等于该值的概率为 50\%}。命令行参数为 n\_insert、n\_rand\_queries、table\_n\_hint。
+对每组参数依次执行：批量插入、顺序全命中查询、随机命中查询、删除半数键、混合命中/未命中查询；每阶段统计操作数、吞吐（ops/s）、平均延迟与 p50。命令行参数为 n\_insert\footnote{批量插入的键数量。}、n\_rand\_queries\footnote{随机命中查询的次数。}、table\_n\_hint\footnote{初始化时传给 init 的表规模提示值，用于影响初始 \(N\) 的选取。}。
 
 为了降低误差的干扰，在 $n\ge 10^4$ 的前提下选取五组参数（删除半数键后 $n=n_{\mathrm{insert}}/2$），覆盖 $K=128$ 与 $K=256$ 两种 Router 桶宽及不同初始 table\_n\_hint。
 
@@ -40,7 +40,7 @@
 
 查询：在 $n\le 5\times10^4$ 时，随机命中查询 p50 稳定在 2.9--3.7\,$\mu$s，吞吐约 $2.5\times10^5$--$3.2\times10^5$\,ops/s，与第三章“Router 定位 + 单槽商压缩校验”的短路径一致。当 $n=10^5$ 时，p50 升至约 5\,$\mu$s，吞吐降至 $1.88\times10^5$\,ops/s：Facility 数增至 1024，单次查询的局部索引与缓存局部性成本上升。
 
-插入：各组插入 p50 为 10--15\,$\mu$s，而平均值常为 p50 的 3--5 倍。$n_{\mathrm{insert}}=3\times10^4$ 一组resize\_start=11，与加载过程中多次触发扩容一致。
+插入：各组插入 p50 为 10--15\,$\mu$s，而平均值常为 p50 的 3--5 倍。$n_{\mathrm{insert}}=3\times10^4$ 一组 resize\_start\footnote{Metrics 中记录的扩容启动次数。}=11，与加载过程中多次触发扩容一致。
 
 删除：多数配置下删除 p50（6--8\,$\mu$s）略高于查询、低于插入，符合“释放槽位 + Router 更新 + 非 tail 回填”的预期。例外是 $n=15000$ 配置：删半键吞吐仅 $3.97\times10^4$\,ops/s，与当次运行中更频繁的 resize 及迁移交错有关，说明删除与扩缩容叠加时会出现阶段性抖动，而非稳态下的常态延迟。
 
@@ -73,13 +73,13 @@
   \end{tabular}
 \end{table}
 
-踢出次数：五组实验中 insert\_moved\_total 与插入次数之比稳定在 0.88--0.94，insert\_moved\_max=5，说明工程版 k-kick 在单 Cubby 内确有频繁槽位搬移，但单次插入触发的链长被常数上界约束，与第三章有界踢出设计一致。delete\_moved\_max 均为 1，删除引起的搬移远少于插入。
+踢出次数：五组实验中 insert\_moved\_total\footnote{全部插入操作累计的 k-kick 搬移次数。}与插入次数之比稳定在 0.88--0.94，insert\_moved\_max\footnote{单次插入过程中 k-kick 搬移次数的最大值。}=5，说明工程版 k-kick 在单 Cubby 内确有频繁槽位搬移，但单次插入触发的链长被常数上界约束，与第三章有界踢出设计一致。delete\_moved\_max\footnote{单次删除过程中元素搬移次数的最大值。}均为 1，删除引起的搬移远少于插入。
 
-Router 步数：router\_steps\_max 不超过 6（仅 $n=5\times10^4$、$N=131072$ 时出现 6），表明在当前随机种子与规模下 Patricia 路由深度未失控；router\_steps\_total 随总操作数近似线性增长，平均每步操作约 1--2 次路由访问，与“先 Router 再单槽校验”的路径相符。
+Router 步数：router\_steps\_max\footnote{单次操作中 Router 访问步数的最大值。}不超过 6（仅 $n=5\times10^4$、$N=131072$ 时出现 6），表明在当前随机种子与规模下 Patricia 路由深度未失控；router\_steps\_total\footnote{全部操作累计的 Router 访问步数。}随总操作数近似线性增长，平均每步操作约 1--2 次路由访问，与“先 Router 再单槽校验”的路径相符。
 
-逻辑元数据：avg\_meta\_bits\_per\_insert 从约 $8.8\times10^3$（$K=128$）增至约 $1.5\times10^4$（$n=10^5$），meta\_bits\_max 同步上升。该量为 MiniArray/Router 编码的逻辑位数累计，反映结构维护随规模加重；但其随规模单调上升的趋势表明，元数据维护是插入期除踢出外的另一主要成本，且对 $K$ 与 Facility 数量敏感。
+逻辑元数据：avg\_meta\_bits\_per\_insert\footnote{每次插入平均累计的 MiniArray/Router 逻辑编码比特数。}从约 $8.8\times10^3$（$K=128$）增至约 $1.5\times10^4$（$n=10^5$），meta\_bits\_max\footnote{单次操作写入元数据逻辑比特数的峰值。}同步上升。该量为 MiniArray/Router 编码的逻辑位数累计，反映结构维护随规模加重；但其随规模单调上升的趋势表明，元数据维护是插入期除踢出外的另一主要成本，且对 $K$ 与 Facility 数量敏感。
 
-扩缩容：rebuild\_up/down 均为 0，规模变化主要由 active/old 双表渐进迁移完成；resize\_start 与 resize\_finish 相等，表示每次扩容均完成收尾。$n=15000$ 终态对应 11 次 resize，高于其余组（8--10 次），与表~\ref{tab:perf-scale} 中该组插入/删除尾部延迟偏大相互印证。
+扩缩容：rebuild\_up\footnote{Facility 层 tier 向上合并（拆分高层 Cubby）的执行次数。}/down\footnote{Facility 层 tier 向下合并（合并低层 Cubby）的执行次数。}均为 0，规模变化主要由 active/old 双表渐进迁移完成；resize\_start 与 resize\_finish\footnote{双表扩缩容完成次数；与 start 相等表示迁移均已收尾。}相等，表示每次扩容均完成收尾。$n=15000$ 终态对应 11 次 resize，高于其余组（8--10 次），与表~\ref{tab:perf-scale} 中该组插入/删除尾部延迟偏大相互印证。
 
 \section{小结}
 

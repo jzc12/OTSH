@@ -104,6 +104,18 @@ uint64_t Router::erase(uint64_t key) {
   return 1;
 }
 
+void Router::erase_cubby(const Cubby *cb) {
+  if (!cb)
+    return;
+  auto it = std::remove_if(
+      entries_.begin(), entries_.end(),
+      [cb](const Entry &e) { return e.v.first == cb; });
+  if (it != entries_.end()) {
+    entries_.erase(it, entries_.end());
+    rebuild();
+  }
+}
+
 void Router::clear() {
   entries_.clear();
   nodes_.clear();

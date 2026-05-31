@@ -43,6 +43,9 @@ public:
     uint64_t meta_bits_total = 0; // 元数据位数总和
     uint64_t meta_bits_max = 0;   // 元数据位数最大值
 
+    uint64_t rebuild_elapsed_ns_total = 0; // cubby 重构累计耗时（纳秒）
+    uint64_t rebuild_elapsed_ns_max = 0;   // 单次重构最大耗时（纳秒）
+
     LatencySummary ht_init;   // 初始化耗时
     LatencySummary ht_insert; // 插入耗时
     LatencySummary ht_query;  // 查询耗时
@@ -75,11 +78,9 @@ public:
   // 删除耗时
   void on_ht_delete_ns(uint64_t ns);
 
-  // 重建下采样
-  void on_rebuild_down();
-
-  // 重建上采样
-  void on_rebuild_up();
+  // 重建下采样 / 上采样（elapsed_ns 为单次重构耗时）
+  void on_rebuild_down(uint64_t elapsed_ns = 0);
+  void on_rebuild_up(uint64_t elapsed_ns = 0);
 
   // 扩容开始
   void on_resize_start();
@@ -112,6 +113,9 @@ private:
 
   std::atomic<uint64_t> meta_bits_total_{0};
   std::atomic<uint64_t> meta_bits_max_{0};
+
+  std::atomic<uint64_t> rebuild_elapsed_ns_total_{0};
+  std::atomic<uint64_t> rebuild_elapsed_ns_max_{0};
 
   // HT-only latency histograms (ns), log2 buckets.
   std::atomic<uint64_t> ht_init_count_{0}, ht_init_total_{0}, ht_init_max_{0};

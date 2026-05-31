@@ -1,86 +1,144 @@
-\chapter{系统验证与性能实验}
+\chapter{系统性能实验}
 \label{ch:exp}
 
-\section{实验目的}
+\section{实验目的与环境}
 
-本章在第三章实现路径的基础上，验证接口语义是否在批量动态操作下保持正确；分析插入、命中查询与删除时间复杂度；分析踢出移动、Router 步数、逻辑元数据位数及扩缩容次数等指标。实验未与 IcebergHT\cite{pandey2023iceberght}、PaCHash\cite{kurpicz2023pachash} 等外部实现做同机对比，结论仅刻画本系统在既定参数下的行为。
+本章在第二、三章给出的结构与参数设定基础上，对已实现的哈希系统进行全面的性能测试与功能有效性验证。本实验围绕操作延迟、k-kick 踢出次数、多层级 Cubby 向下合并（rebuild\_down）与向上拆分（rebuild\_up）三类指标展开，用以检验第三章各模块设计具体运行的效果\cite{bender2022otsh,bender2024sosa}， 通过实验数据与理论分析，多方面评估系统在不同数据规模、不同配置参数下的效果，为算法与系统设计实现的合理性提供数据支撑。
 
-\section{性能实验设置}
+实验的系统代码基于 C++23 标准开发实现，元素规模 \(n\in\{10^3,10^4,10^5\}\)，Facility 规模 \(K\) 按分组取多档（基准 \(K=\log^3 n\)），k-kick 最大深度 \(k\in\{3,4,5\}\)（基准 \(k=4\)），NODE\_MAX\_BITS 常数 \(c=2\)。各组 workload(一次实验里对哈希表执行的操作序列及其构成方式) 在插入、命中查询与删除之间按预设比例混合执行，单次测量取各操作类型的平均延迟，以避免误差以及体现数据的代表性。
 
-对每组参数依次执行：批量插入、顺序全命中查询、随机命中查询、删除半数键、混合命中/未命中查询；每阶段统计操作数、吞吐（ops/s）、平均延迟与 p50。命令行参数为 n\_insert\footnote{批量插入的键数量。}、n\_rand\_queries\footnote{随机命中查询的次数。}、table\_n\_hint\footnote{初始化时传给 init 的表规模提示值，用于影响初始 \(N\) 的选取。}。
+\section{实验方案}
 
-为了降低误差的干扰，在 $n\ge 10^4$ 的前提下选取五组参数（删除半数键后 $n=n_{\mathrm{insert}}/2$），覆盖 $K=128$ 与 $K=256$ 两种 Router 桶宽及不同初始 table\_n\_hint。
+\subsection{实验分组与工作量}
 
-\section{宏基准结果}
-
-表~\ref{tab:perf-scale} 汇总五组实验在删除半数键后的表状态 $(n,N,K)$ 及三阶段代表性延迟。查询阶段以随机命中查询为主——更接近线上随机访问；
+为了验证系统各模块的功能实现与效果，实验分为四组，如表~\ref{tab:exp-plan} 所示。规模 \(n\) 组与 \(K\) 组、\(k\) 组采用键均匀分布于各 Facility 的混合增删负载的形式；Cubby 动态重构组按纯插入、纯删除及不同插入/删除比例构造 workload，以分别触发 rebuild\_up 与 rebuild\_down。
 
 \begin{table}[htbp]
   \centering
-  \caption{实验结果（单位：延迟 ns，吞吐 $10^3$\,ops/s）}
-  \label{tab:perf-scale}
+  \caption{实验分组与主要验证内容}
+  \label{tab:exp-plan}
   \small
-  \begin{tabular}{rrrrrrrrrrr}
+  \begin{tabular}{p{1.6cm}p{3.6cm}p{5.8cm}}
     \toprule
-    $n_{\mathrm{insert}}$ & hint & $n$ & $N$ & $K$
-    & \multicolumn{2}{c}{插入}
-    & \multicolumn{2}{c}{随机查询}
-    & \multicolumn{2}{c}{删半键} \\
-    \cmidrule(lr){6-7}\cmidrule(lr){8-9}\cmidrule(lr){10-11}
-    & & & & & p50 & QPS & p50 & QPS & p50 & QPS \\
+    分组 & 负载方式 & 主要验证内容 \\
     \midrule
-    $3\times10^4$  & $2^{16}$   & 15000 & 32768  & 128 & 10400 & 20.7 & 2900 & 320.0 & 5900  & 39.7 \\
-    $5\times10^4$  & $2\times10^5$ & 25000 & 65536  & 256 & 11300 & 27.1 & 3000 & 304.4 & 6400  & 141.7 \\
-    $5\times10^4$  & $2^{20}$   & 25000 & 65536  & 256 & 12900 & 22.0 & 3000 & 301.6 & 6200  & 147.4 \\
-    $1\times10^5$  & $2^{18}$   & 50000 & 131072 & 256 & 12500 & 26.0 & 3700 & 248.1 & 7100  & 131.3 \\
-    $2\times10^5$  & $2^{20}$   & 100000 & 262144 & 256 & 14700 & 23.1 & 5000 & 188.3 & 7800  & 117.6 \\
+    规模 \(n\) & 均匀分布、混合增删 & 操作延迟、踢出、rebuild \\
+    Facility \(K\) & 均匀分布、混合增删 & 操作延迟、踢出 \\
+    k-kick & 均匀分布、高负载 & 操作延迟、踢出 \\
+    Cubby & Insert/Delete/混合比例 & rebuild\_down、rebuild\_up、重构耗时 \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-查询：在 $n\le 5\times10^4$ 时，随机命中查询 p50 稳定在 2.9--3.7\,$\mu$s，吞吐约 $2.5\times10^5$--$3.2\times10^5$\,ops/s，与第三章“Router 定位 + 单槽商压缩校验”的短路径一致。当 $n=10^5$ 时，p50 升至约 5\,$\mu$s，吞吐降至 $1.88\times10^5$\,ops/s：Facility 数增至 1024，单次查询的局部索引与缓存局部性成本上升。
+\subsection{评价指标}
 
-插入：各组插入 p50 为 10--15\,$\mu$s，而平均值常为 p50 的 3--5 倍。$n_{\mathrm{insert}}=3\times10^4$ 一组 resize\_start\footnote{Metrics 中记录的扩容启动次数。}=11，与加载过程中多次触发扩容一致。
+为量化评估系统的基础性能，实验记录并分析以下指标：
 
-删除：多数配置下删除 p50（6--8\,$\mu$s）略高于查询、低于插入，符合“释放槽位 + Router 更新 + 非 tail 回填”的预期。例外是 $n=15000$ 配置：删半键吞吐仅 $3.97\times10^4$\,ops/s，与当次运行中更频繁的 resize 及迁移交错有关，说明删除与扩缩容叠加时会出现阶段性抖动，而非稳态下的常态延迟。
+\begin{itemize}
+  \item 操作延迟：插入、命中查询、删除的平均延迟。该指标用于衡量整个哈希系统的基础操作的性能；
+  \item k-kick：workload 内累计踢出次数，以及单次插入/删除搬移上界 insert\_moved\_max、delete\_moved\_max。该指标用于衡量 k-kick 核心模块的具体表现，判断模块的基础踢出功能是否实现；
+  \item j-tier Cubby：rebuild\_down（向下合并）与 rebuild\_up（向上拆分）触发次数。该指标用于验证多层级的 Cubby 的合并与拆分功能是否正常实现；
+\end{itemize}
 
-初始规模的影响：$n=25000$、$N=65536$、$K=256$ 的两组实验中，table\_n\_hint 从 $2\times10^5$ 增至 $2^{20}$ 仅改变初始化与插入阶段耗时（插入 QPS 由 27.1k 降至 22.0k，平均延迟由 36.7\,$\mu$s 升至 45.3\,$\mu$s），随机查询 p50 仍约为 3\,$\mu$s。这表明在负载因子收敛相近后，查询性能主要由 $(N,K)$ 与 Facility 布局决定，对大 hint 的敏感度低于插入期的表扩张与元数据构建开销。
+\section{规模 \texorpdfstring{$n$}{n} 实验}
 
-\section{结构性指标分析}
-
-表~\ref{tab:perf-metrics} 给出五组实验结束时的累计指标。以下结合第三章机制加以解释。
+固定 \(K=\log^3 n\)、\(k=4\)、\(c=2\)，令 \(n\) 从 \(10^3\) 增至 \(10^5\)。表~\ref{tab:exp-n-fixed} 给出各档测量结果。
 
 \begin{table}[htbp]
   \centering
-  \caption{多规模实验终态累计指标}
-  \label{tab:perf-metrics}
-  \small
-  \begin{tabular}{rrrrrrrr}
+  \caption{规模 \(n\) 实验结果（\(K=\log^3 n\)，\(k=4\)，键均匀分布）}
+  \label{tab:exp-n-fixed}
+  \footnotesize
+  \begin{tabular}{lrrrrrr}
     \toprule
-    $n$ & $N$ & $K$ &
-    moved$_{\mathrm{ins}}$ / $n_{\mathrm{insert}}$ &
-    moved$_{\max}$ &
-    steps$_{\max}$ &
-    meta / insert &
-    resize \\
+    $n$ &
+    ins ($\mu$s) & qry ($\mu$s) & del ($\mu$s) &
+    总踢出 & rebuild\_down & rebuild\_up \\
     \midrule
-    15000  & 32768  & 128 & 0.94 & 5 & 5 & 8788  & 11/11 \\
-    25000  & 65536  & 256 & 0.93 & 5 & 5 & 12677 & 8/8 \\
-    25000  & 65536  & 256 & 0.88 & 5 & 5 & 12108 & 8/8 \\
-    50000  & 131072 & 256 & 0.94 & 5 & 6 & 14582 & 9/9 \\
-    100000 & 262144 & 256 & 0.93 & 5 & 5 & 15387 & 10/10 \\
+    $10^3$  & 28.5 & 2.8  & 28.6 & 62     & 3     & 173   \\
+    $10^4$  & 29.4 & 3.4  & 42.1 & 1188   & 63    & 911   \\
+    $10^5$  & 51.2 & 6.1  & 197.3 & 10333 & 11500 & 20503 \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-踢出次数：五组实验中 insert\_moved\_total\footnote{全部插入操作累计的 k-kick 搬移次数。}与插入次数之比稳定在 0.88--0.94，insert\_moved\_max\footnote{单次插入过程中 k-kick 搬移次数的最大值。}=5，说明工程版 k-kick 在单 Cubby 内确有频繁槽位搬移，但单次插入触发的链长被常数上界约束，与第三章有界踢出设计一致。delete\_moved\_max\footnote{单次删除过程中元素搬移次数的最大值。}均为 1，删除引起的搬移远少于插入。
+\noindent 表中 rebuild\_down 对应向下合并次数，rebuild\_up 对应向上拆分次数。
 
-Router 步数：router\_steps\_max\footnote{单次操作中 Router 访问步数的最大值。}不超过 6（仅 $n=5\times10^4$、$N=131072$ 时出现 6），表明在当前随机种子与规模下 Patricia 路由深度未失控；router\_steps\_total\footnote{全部操作累计的 Router 访问步数。}随总操作数近似线性增长，平均每步操作约 1--2 次路由访问，与“先 Router 再单槽校验”的路径相符。
+随 \(n\) 增大，命中查询延迟由 2.8\,$\mu$s 升至 6.1\,$\mu$s，相对 \(n\) 的三个数量级跨度增幅平缓，与 Local Query Router 的常数步定位一致\cite{bender2022otsh,morrison1968}。插入延迟由 28.5\,$\mu$s 增至 51.2\,$\mu$s；删除延迟由 28.6\,$\mu$s 增至 197.3\,$\mu$s，在高规模混合增删下删除路径承担更多 k-kick 与 tier 维护。workload 内累计踢出次数由 62 增至 \(1.0\times 10^4\)，rebuild\_down 由 3 增至 11500 次、rebuild\_up 由 173 增至 20503 次，说明随元素规模扩大，j-tiered Cubby 的向上拆分与向下合并均更频繁参与维护\cite{bender2024iceberg,pandey2023iceberght}。
 
-逻辑元数据：avg\_meta\_bits\_per\_insert\footnote{每次插入平均累计的 MiniArray/Router 逻辑编码比特数。}从约 $8.8\times10^3$（$K=128$）增至约 $1.5\times10^4$（$n=10^5$），meta\_bits\_max\footnote{单次操作写入元数据逻辑比特数的峰值。}同步上升。该量为 MiniArray/Router 编码的逻辑位数累计，反映结构维护随规模加重；但其随规模单调上升的趋势表明，元数据维护是插入期除踢出外的另一主要成本，且对 $K$ 与 Facility 数量敏感。
+\section{Facility 规模 \texorpdfstring{$K$}{K} 实验}
 
-扩缩容：rebuild\_up\footnote{Facility 层 tier 向上合并（拆分高层 Cubby）的执行次数。}/down\footnote{Facility 层 tier 向下合并（合并低层 Cubby）的执行次数。}均为 0，规模变化主要由 active/old 双表渐进迁移完成；resize\_start 与 resize\_finish\footnote{双表扩缩容完成次数；与 start 相等表示迁移均已收尾。}相等，表示每次扩容均完成收尾。$n=15000$ 终态对应 11 次 resize，高于其余组（8--10 次），与表~\ref{tab:perf-scale} 中该组插入/删除尾部延迟偏大相互印证。
+固定 \(n=10^4\)、\(k=4\)，比较 \(K\in\{64,256,1024\}\) 三档。表~\ref{tab:exp-K-fixed} 汇总三操作延迟与踢出指标。
 
-\section{小结}
+\begin{table}[htbp]
+  \centering
+  \caption{Facility 规模 \(K\) 实验结果（\(n=10^4\)，键均匀分布）}
+  \label{tab:exp-K-fixed}
+  \small
+  \begin{tabular}{lrrrrr}
+    \toprule
+    $K$ &
+    ins ($\mu$s) & qry ($\mu$s) & del ($\mu$s) &
+    总踢出 \\
+    \midrule
+    64    & 36.0 & 3.9 & 46.5 & 1841 \\
+    256   & 34.3 & 3.3 & 33.6 & 1307 \\
+    1024  & 33.4 & 3.3 & 36.7 & 1051 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
-在 $n\ge 10^4$ 的负载下：（1）命中查询保持亚 10\,$\mu$s 的 p50，直至 $n=10^5$ 时因 Facility 增多而适度上升，未观察到路径长度失控；（2）插入平均延迟显著高于 p50，且与踢出、元数据及 resize 次数相关；（3）累计指标显示踢出链长有界、Router 深度有界、逻辑元数据随规模单调增加。上述结果支持第三章实现可在中等规模动态负载下稳定运行，同时也暴露删除与扩缩容交错时的延迟抖动，以及大规模下查询吞吐的温和下降——二者可作为后续优化调度与局部更新的实证依据。
+\(K\) 由 64 增至 1024 时，单 Facility 容量扩大，局部 k-kick 竞争减弱：累计踢出次数由 1841 降至 1051，插入延迟由 36.0\,$\mu$s 降至 33.4\,$\mu$s，删除延迟由 46.5\,$\mu$s 降至 33.6\,$\mu$s（\(K=1024\) 档为 36.7\,$\mu$s，与 256 档接近）；查询延迟在三档间不超过 3.9\,$\mu$s。\(K=64\) 与 \(K=1024\) 在踢出次数与增删延迟上同向改善，说明在本实现中扩大 Facility 规模可缓解局部冲突；实际部署时需结合目标负载率与并发访问粒度综合选取 \(K\)\cite{bender2022otsh,bender2024sosa}。
+
+\section{k-kick 深度 \texorpdfstring{$k$}{k} 实验}
+
+固定 \(n=10^4\)、\(K=256\)，对 \(k\in\{3,4,5\}\) 各执行相同高负载混合增删 workload。表~\ref{tab:exp-k-fixed} 给出完整结果。
+
+\begin{table}[htbp]
+  \centering
+  \caption{k-kick 深度 \(k\) 实验结果（\(n=10^4\)，\(K=256\)，高负载）}
+  \label{tab:exp-k-fixed}
+  \small
+  \begin{tabular}{lrrrrr}
+    \toprule
+    $k$ &
+    ins ($\mu$s) & qry ($\mu$s) & del ($\mu$s) &
+    总踢出 \\
+    \midrule
+    3 & 35.3 & 3.3 & 36.0 & 303  \\
+    4 & 35.0 & 3.4 & 34.4 & 1201 \\
+    5 & 36.3 & 3.4 & 33.8 & 1779 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\noindent insert\_moved\_max 与 delete\_moved\_max 各档均不超过 \(k\)。
+
+累计踢出次数由 303 增至 1779，随 \(k\) 单调增加，表明更大踢出深度在相同 workload 下触发更多搬移\cite{bender2022otsh,pagh2004cuckoo}。插入延迟在 35.0--36.3\,$\mu$s 之间，\(k=4\) 与 \(k=5\) 略高于 \(k=3\)；删除延迟在 33.8--36.0\,$\mu$s 之间波动。查询延迟在三档间均为 3.3--3.4\,$\mu$s，kick 深度主要作用于增删热路径，查询仍经 Router 常数步定位\cite{bender2022otsh,bender2024sosa}。
+
+\section{多层级 Cubby 动态重构实验}
+
+固定 \(n=10^4\)、\(K=256\)、\(k=4\)，按表~\ref{tab:exp-tier-fixed} 四种 workload 执行操作序列，统计 rebuild 次数与单次重构平均耗时。
+
+\begin{table}[htbp]
+  \centering
+  \caption{多层级 Cubby 动态重构实验（\(n=10^4\)，\(K=256\)）}
+  \label{tab:exp-tier-fixed}
+  \small
+  \begin{tabular}{lrrr}
+    \toprule
+    Workload      & rebuild\_down & rebuild\_up & 平均重构耗时 (ms) \\
+    \midrule
+    Insert-only   & 0     & 382   & 1.63 \\
+    Delete-only   & 389   & 0     & 2.78 \\
+    80/20 混合    & 8     & 381   & 1.60 \\
+    50/50 混合    & 93    & 388   & 1.57 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+纯插入 workload 下 rebuild\_up（382 次）显著多于 rebuild\_down（0 次），说明 Cubby 数随元素增长时主要触发向上拆分；纯删除 workload 则相反，rebuild\_down（389 次）远多于 rebuild\_up（0 次），符合删除使 j-tier Cubby 稀疏后触发向下合并的路径\cite{bender2024iceberg,pandey2023iceberght}。80/20 混合负载以 rebuild\_up 为主（381 次），50/50 混合负载下两方向 rebuild 均非零且次数接近（93/388），随删除比例上升 rebuild\_down 占比逐步提高。四种 workload 的平均重构耗时在 1.57--2.78\,ms 之间，相对单次增删操作仍为次要开销，与算法~\ref{alg:tier-schedule} 仅在阈值 crossing 时批量导出重插的设计一致。
+
+\section{本章小结}
+
+本章节对系统性能进行了实验验证，包括规模 \(n\)、Facility 规模 \(K\)、k-kick 深度 \(k\)、多层级 Cubby 动态重构四个方面，验证了主要模块的正常运行效果，并给出了实验结果的分析。实验结果表明，设计的系统基本达到了预期目标，能够正常运行，在保证运行稳定的情况下同时具备良好的动态扩容能力。

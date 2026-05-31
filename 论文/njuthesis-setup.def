@@ -11,12 +11,12 @@
 % info 类用于录入个人信息
 %   带*号的为对应英文字段
 \njusetup[info]{
-    title = {实践中的理论最优哈希表},
+    title = {面向实践的紧凑哈希表设计与简化复现},
     % 中文题目
     % 直接填写标题就是自动换行
     % 可以使用换行控制符(\\)手动指定换行位置
     %
-    title* = {On the Optimal Time/Space Tradeoff for Hash Tables},
+    title* = {Practical Compact Hash Table Design and Simplified Reproduction},
     % 英文题目
     %
     author = {纪泽操},
@@ -30,7 +30,7 @@
     % 中文关键词列表
     % 使用英文半角逗号(,)分隔
     %
-    keywords* = {hash tables, time--space tradeoff, the Probe-Complexity problem, enhanced open addressing, k-kick tree, dynamic expansion},
+    keywords* = {hash tables, time--space tradeoff, probe complexity, enhanced open addressing, k-kick tree, dynamic expansion},
     % 英文关键词
     % 使用英文半角逗号(,)分隔
     %
@@ -63,7 +63,7 @@
     % 第二导师全称
     % 如果确实没有第二导师，不填写即可
     %
-    submit-date = {2026-05-30},
+    submit-date = {2026-06-03},
     % 提交日期
     % 格式为 yyyy-mm-dd
     % 不填就是编译当天日期

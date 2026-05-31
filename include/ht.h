@@ -45,12 +45,16 @@ struct HashTableState {
   uint64_t N = 0;
   uint64_t K = 0;
   uint64_t facilities = 0;
+  int k_kick = 0;
+  int k_polylog_exp = 0;
+  std::string preset_id;
 };
 
-// 只读遍历当前内存结构（用于 snapshot_meta / cubby / slot_snapshot 落库）。
+// 只读遍历当前内存结构（实验统计 / 结构检查用）。
 struct CubbyStructureView {
   int facility_id = 0;
-  int tier = 0;
+  int tier = 1;        // Cubby.tier：j-tiered 层级（§3.1 从 1 起）
+  int tiers_slot = -1; // Facility.tiers 数组下标（0=1-tiered 池）；-1 表示 tail
   int capacity = 0;
   int size = 0;
   bool is_tail = false;
@@ -97,6 +101,12 @@ public:
 
   // 设计文档中的 π(x)，用于 slot_snapshot.key_hash。
   uint64_t pi_of(uint64_t key) const;
+
+  // 耗尽后台 rebuild / 双表迁移队列（实验收尾用）。
+  void drain_background_work();
+
+  // 终态逻辑元数据比特数（Router + MiniArray + Cubby 辅助结构）。
+  uint64_t logical_meta_bits() const;
 
 private:
   class Impl;

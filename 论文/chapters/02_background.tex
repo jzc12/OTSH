@@ -3,48 +3,146 @@
 
 \section{探测复杂度与球槽分配模型}
 
-开放寻址哈希表可被抽象为在线状态下的球槽分配问题\cite{aamand2021dynamic,bansal2022deletions}，假设表里有固定的槽位数，每个槽位最多只能存储一个元素；系统具有动态插入和删除的功能，任何时候元素的数量都不能超过槽位的数量，对于任意键 \(x\) ，哈希计算会生成一条预先确定的随机探测序列。
+开放寻址哈希表可被抽象为在线状态下的球槽分配问题\cite{aamand2021dynamic,bansal2022deletions,mitzenmacher2001}：表中有固定数量的槽位，每个槽位至多容纳一个元素；系统支持动态插入与删除，且任一时刻元素个数不超过槽位数。对任意键 \(x\)，哈希过程为其生成一条预先确定的随机探测序列
+\[
+  h_1(x), h_2(x), \ldots
+\]
+元素只会被安置于该序列给出的候选槽位之一。
 
-\[ h_1(x), h_2(x), \cdots ,\]
-元素只会被安排到此序列指定的诸多候选槽位之中。
+当某元素最终被置于其探测序列的第 \(i\) 个候选位置时，探测复杂度\footnote{查询时需记录“元素落在第 \(i\) 个候选位置”所需的比特数，记为 \(\Theta(1+\log i)\)，与辅助元数据空间直接相关。}定义为 \(\Theta(1+\log i)\)。该量可理解为查询阶段为记录“元素采用了第几个候选位置”而必须保存的比特数目，因而与辅助元数据的空间开销直接相关。在该模型下，平均探测复杂度刻画整体附加空间，交换成本刻画单次更新中被搬移元素的个数；最优哈希表理论所关注的核心问题，是在允许有限交换的前提下，如何尽可能降低平均探测复杂度\cite{bender2022otsh,kuszmaul2024filters,pagh2004linear}。形式地，若表内 \(n\) 个元素分别落在其探测序列的第 \(i_1,i_2,\ldots,i_n\) 个候选位置，则平均探测复杂度为
+\[
+  \frac{1}{n}\sum_{t=1}^{n}\Theta(1+\log i_t),
+\]
+而单次插入或删除的交换成本为踢出链中被搬移元素个数的上界。Bender 等人\cite{bender2022otsh} 通过调节 k-kick 深度参数 \(k\)，使上述两项分别控制在 \(O(\log^{(k)}n)\) 与 \(O(k)\) 量级，形成可调的时间/空间权衡曲线。更精确地，他们提出：若查询必须在常数时间内完成，且插入、删除允许承担 \(O(k)\) 次元素交换，则每个元素所需的额外空间可由 \(O(\log\log n)\) 比特降至 \(O(\log^{(k)}n)\) 比特。该结果说明，开放寻址哈希表的空间效率不仅取决于空位占比，还与元素搬移、局部引导信息及键恢复编码密切相关。后文将给出与之配套的地址拆分、分层存储与 Local Query Router 设计，使探测序列在插入阶段完整定义、在查询阶段却不必线性扫描。
 
-当某元素最终被置于其探测序列的第\(i\)个候选位置时，探测复杂度\footnote{查询时需记录“元素落在第 \(i\) 个候选位置”所需的比特数，记为 \(\Theta(1+\log i)\)，与辅助元数据空间直接相关。}被定义为 \(\Theta(1+\log i)\)。这一数量可被视为查询期间记录“元素采用第几个候选位置”所需的比特数目，因此与辅助元数据的空间开销存在直接关联。在该模型中有两个指标需同时把控：其一为平均探测复杂度，其对应的是整体附加空间；其二是交换成本，其指的是一次更新过程中被搬移元素的数量。最优哈希表理论所探讨的核心要点，是在允许有限交换的条件下，尽力减小平均探测复杂度。
+\section{系统核心设定：全域与哈希基础}
 
-\section{k-kick 树分层驱逐思想}
+\subsection{全局参数}
 
-k-kick 树并非一种实际的树形数据结构，而是一种规则，此规则将固定长度的数组依照下标抽象成树的形式，第一层包含 \( s_0 = n \) 个元素，第二层则包含两个子区间，每个子区间有 \( s_1 = \frac{n}{2} \) 个元素，以此类推，下一层的两个元素由上一层均分而来，若已知元素位于某层的区间范围，便能推断出它上层所属的区间，由此生成的树形结构便是 k-kick 树的核心理念，但它本质上仍然是数组，这种结构会把一个 cubby 中按顺序排列的槽位分配到 \( k + 1 \) 个逻辑层级之上，而且各层级的大小随层级加深而依次变小，深层的 cubby 更靠近元素的随机偏好位置，因而具有较高的放置优先级；而表层的 cubby 覆盖范围广，主要用于收纳很多无法存放在深层位置的元素。
+设键空间全域为 \(U\)，且 \(|U|=\mathrm{poly}(n)\)。当前表内元素规模提示为 \(n\)；表容量 \(N\) 取为 2 的幂，使实际容量落在区间 \([N,2N]\) 内。每个 Facility 的基准规模为
+\[
+  K=\mathrm{polylog}\,n,
+\]
+通常取 \(K=\Theta(\log^c n)\) 且 \(c\in[2,4]\)，以便在 Facility 数量 \(N/K\) 与局部结构规模之间取得平衡\cite{bender2022otsh,bender2024sosa}。
 
-在进行插入操作之前，哈希过程会为元素明确一条从深层到浅层的Cubby路径，并且会给出该元素可使用的最大深度。插入时系统会尝试深层的Cubby；若目标Cubby处于已满状态但仍可调整，则可将其中优先级较低的元素踢出，随后将当前元素放置于该位置，被踢出的元素会再向更浅层寻找合法位置。因为每一次踢出均按照层级方向推进，所以级联进程会受到层数的限制。
+\subsection{可逆置换与全局路由哈希}
 
-参数\(k\)控制着层数，所以单次更新过程里的迁移次数能被限制在大约\(O(k)\)这个数量级，论文\cite{bender2022otsh}表明，在这种交换成本情况下，平均探测复杂度可缩减到大概\(O(\log^{(k)}n)\)，文章后面会记载kick\_count，而且会在实验说明里把理论 k-kick 树和当下工程版踢出链区分开来。
+对任意键 \(x\)，先经随机可逆置换 \(\pi\) 映射为 \(\pi(x)\)。该类置换可由 Feistel 等构造从伪随机函数生成\cite{luby1988,carter1979,thorup2012tabulation}。定义 \(x[a, b]\) 表示 \(x\) 的第 \(a\) 位到第 \(b\) 位组成的子串（从低位到高位），则全局路由哈希 \(g^\ast(x)\) 定义为 \(\pi(x)\) 的低 \(\log N\) 位：
+\[
+  g^\ast(x)=\pi(x)[1,\log N].
+\]
+置换值在 \(\log N\) 位以上的部分存入槽位载荷，记为
+\[
+  \mathrm{storage}=\pi(x)[\log N+1,\log U],
+\]
+即商压缩意义下的 payload；该部分不再参与 Facility 与 Cubby 的路由，仅在命中校验时与局部元数据联立以恢复完整 \(\pi(x)\)。
 
-\section{紧凑元数据存储核心思想}
+从比特布局上看，\(\pi(x)\) 可示意划分为“高位 payload + 低位 \(g^\ast(x)\)”；而 \(g^\ast(x)\) 自身又可自高向低继续划分为 Facility 编号段、Cubby 中间段与 local query router 段，分别用于表级分区、Cubby 内桶化与局部 router 索引。图~\ref{fig:gx-layout} 概括了这一层次。
 
-分层放置虽然会使探测变得不那么复杂，但在执行查询时，仍需知道元素最终处于哪个Cubby及其所对应的槽位，理论框架里用到了MiniArray和Local Query Router这两个部件，MiniArray用于解决变长元数据的存储问题，Local Query Router则负责处理局部键与槽位之间的映射关系。
+\begin{figure}[htbp]
+  \centering
+  \setlength{\tabcolsep}{4pt}
+  \small
+  \begin{tabular}{|c|c|c|} 
+    \hline
+    \multicolumn{1}{|c|}{$\pi(x)$ 高位：payload / storage} &
+    \multicolumn{2}{c|}{$g^\ast(x)=\pi(x)[1,\log N]$} \\
+    \hline
+    $\pi(x)[\log N+1,\log U]$ & Facility 位 & Cubby 中间位 + $g_I(x)$ \\
+    \hline
+    存入槽位 storage & $r=g^\ast[\log K+1,\log N]$ & $g^\ast[1,\log K]$ \\
+    \hline
+  \end{tabular}
+  \caption{$\pi(x)$ 与 $g^\ast(x)$ 的位段划分（示意）}
+  \label{fig:gx-layout}
+\end{figure}
 
-MiniArray用以存储处于同个Cubby之中但长度存在差异的元数据条目，该理论方案借助内存 B 树及查表法来执行变长比特串的打包过程，可以做到在均摊常量时间里完成读写动作，其空间代价与条目的总计比特数成正比关系，不必给每个槽位都按最大条目长度分配空间。打包式哈希表\cite{kurpicz2023pachash}与紧凑检索结构\cite{pagh2008retrieval}在工程上提供了相近的“按条目实际长度计费”思路，但更新模型与本文的动态踢出路径并不相同。
+\subsection{Facility 编号与 Cubby 内局部地址}
 
-Local Query Router主要承担对小规模键集合进行本地定位的职责。其将键映射为随机比特串，借助二进制前缀树区分不同的键，之后把树结构以及叶子上的槽位信息编码成连续的比特流。由于每一个Router仅负责管理局部的少量元素，因此前缀树的预期规模相对较小，能够在较低的空间开销情况下实现键到Cubby以及Slot的映射。第三章中的Router与MiniArray均依照该接口语义来实现，但其更新途径采用了简化处理方式。
+在 \(g^\ast(x)\) 已确定的前提下，Facility 编号取
+\[
+  r=g^\ast(x)[\log K+1,\log N]
+  \;=\;\left\lfloor \frac{g^\ast(x)}{K}\right\rfloor .
+\]
+对容量为 \(|I|\) 的 Cubby，其内部 local query router 段（与 k-kick 偏好序列无关）定义为
+\[
+  g_I(x)=g^\ast(x)[1,\log |I|],
+\]
+即 \(g^\ast(x)\) 的最低 \(\log|I|\) 位，取值范围为 \([0,|I|-1]\)。所有满足 \(g_I(x)=i\) 的键由该 Cubby 内第 \(i\) 号 local query router \(A[i]\) 管理；\(g^\ast(x)\) 中 \([{\log|I|+1},{\log K}]\) 的中间位则与 Facility 编号 \(r\) 及 payload 共同用于恢复完整 \(g^\ast(x)\)，进而经由 \(\pi^{-1}\) 得到原始键 \(x\)\cite{bender2022otsh,pagh2008retrieval}。
 
-\section{分层架构整体设计思想}
+\section{核心组件层级关系}
 
-本文工作用Facility - Cubby - Slot这种三级架构来组织数据，Facility承担表格区域划分和路由任务，Cubby负责本地存储及元数据守护，Slot对应格子中的实际数组位置。
-
-Cubby是局部存储单元，其内部存有存储槽，可变长度的元数据以及空闲槽检索构造，承担元素的放置，局部的驱逐以及键恢复所涉信息的维护任务。Facility对多个Cubby进行聚合，并且借助局部Router将键精准定位到目标Cubby以及相应的槽位。理论架构当中还引入了多 tiered Cubby\footnote{按层级 \(j\) 组织不同容量与数量的 Cubby 集合，配合 tail 与拆分/合并维持高装填因子与均摊扩容。}以及 tail\footnote{各 Facility 唯一允许未满载的 Cubby；新插入默认进入 tail，删除非 tail 元素时由 tail 回填以维持其余 Cubby 接近满载。}机制，非 tail Cubby尽可能维持处于满载状态，因插入与删除所引发的局部性波动主要由 tail 承受。
-
-为了能够实现动态扩容和缩容，论文提出了多 tiered Cubby 机制，取一个 1-tiered cubby 作为 tail cubby，每次插入元素都插入 tail cubby 中，为了维护不变量，保持 j-tiered cubby\footnote{tiered Cubby 及不同层级的 j-tiered cubby 在第三章详细说明，此处从略。} 的装满状态以便实现均摊低成本的扩容和缩容以及逼近 1 的装填因子。当删除的元素不在 tail cubby 中时，会从 tail cubby 取出一个元素放入对应 cubby\footnote{该回填通过插入操作完成，用于维护对应 cubby 的 k-kick 树优先级与各层饱和状态。}。同时，不同 j-tiered cubby 的数量以及大小需要维护：设 \(t_j\) 为 j-tiered cubby 的理想数量，若真实数量远低于 \(t_j\)，则尝试将一个 \((j+1)\)-tiered cubby 拆成 \(t_j\) 个 j-tiered cubby；若 j-tiered cubby 过多，则合并为一个 \((j+1)\)-tiered cubby。具体细节在第三章阐述。
-
-\section{商压缩的信息论最优思想}
-
-正常情况下，哈希表若于槽位中完整保留原始键，则部分信息会与寻址过程重复。商压缩借助可逆双射映射 \(\pi\)\cite{bender2022otsh,pagh2008retrieval}，取映射后的低位作为路由；路由既知后，槽位只需保存剩余高位与少量恢复信息，从而达到空间压缩的效果。
-
-具体而言，\(\pi(x)\) 的低 \(\log N\)位用来确定 Facility，Router 桶和局部偏好位置；槽位只保存去除该部分之后的 payload，若要复原完整的  \(\pi(x)\)，元数据记载偏好槽位与实际槽位的差值，还有局部桶里的中间位，再加上 Facility 编号，槽位下标和 payload，系统就能重新创建置换值，然后经由 \(\pi^{-1}\) 得到原本的键，第三章会遵照当下代码里的 payload、mid\_bits 和 delta 来阐述这个过程。
-
-\section{算法层次全景总结}
-上述的理论结构可概括为三方面：
+在逻辑结构上，整张表可视为一个大规模数组，均等划分为 \((N/K)\) 个 Facility；每个 Facility 管理规模为 \(K\) 的局部范围，并在其内部维护多层级、多容量的 Cubby 集合。Cubby 是实际存放元素的局部块；每个 Cubby 内部又包含以下部分：
 \begin{itemize}
-   \item Facility 负责组织 Cubby、维护 tail、承载扩缩容和重建过程中的局部管理。
-   \item Router 负责把键映射到目标 Cubby 与 Slot，并为查询提供局部定位信息；
-   \item Cubby 负责元素放置、空闲槽检索、局部 k-kick 树和变长元数据编码；
+  \item storage 数组：长度为 \(|I|\) 的槽位数组，存放商压缩 payload 即 \(\pi(x)[\log N+1,\log U]\)；
+  \item k-kick 逻辑：将整个 cubby 逻辑上划分为多 bin 层级，完成插入、踢出与被踢元素的重插，不要求额外的物理树结构；
+  \item MiniArray \(A\)：长度为 \(|I|\) 的 local query router 数组，\(A[i]\) 维护所有 \(g_I(x)=i\) 的键到探测序列下标的映射；
+  \item MiniArray \(M\)：记录各 k-kick 深度 bin 的空闲槽位信息，支持在常数时间内判定 bin 内是否存在空位、定位空位；
+  \item MiniArray \(B\)：与 storage 槽位一一对应，保存 \(\delta=g_I(x)-i\) 及恢复 \(g^\ast(x)[log|I|+1,\log K]\) 所需的中间位等信息。
 \end{itemize}
-后续的章节会把这三方面当作系统开发的结构参考，并且阐述理论结构和实际达成之间的差别：第二章说明理论机制，第三章对应到代码实现，第四章再依据实际测试结果解释当前实现的行为边界。
+
+Facility 层另维护一棵基于 B 树、深度为 \(O(1)\) 的 MiniArray，用于在变长元数据与 Facility 级索引上实现均摊常数时间的访问、插入、删除与更新\cite{bender2022otsh,bayer1972}。MiniArray 中每个内部节点最多有多少个子节点称为 fanout，取 \(\Theta(\log n/\log\log n)\)，内部指针仅需 \(\Theta(\log\log n)\) 比特，从而与整体 \(O(\log^{(k)}n)\) 的空间目标相容\cite{pagh2001,jacobson1989}。
+
+为在动态扩缩容下维持高装填因子，每个 Facility 还引入 \emph{tail Cubby} 机制：初始时仅含一个 1-tiered Cubby 作为 tail；此后所有新插入默认进入 tail，tail 满后转为普通 1-tiered Cubby 并新建 tail。不同 \(j\)-tiered Cubby 的目标个数与容量分别为
+\[
+  t_j=\Theta\!\left(\frac{(\log^{(j+1)}n)^2}{(\log^{(j)}n)^2}\right),\qquad
+  r_j=\frac{K}{(\log^{(j)}n)^2};
+\]
+当某层 Cubby 数量偏离 \(t_j\) 时，通过向上合并或向下拆分并在新 Cubby 内重插全部元素来恢复分布不变量。删除非 tail 元素时，从 tail 随机抽取一个元素回填至被删槽位；tail 为空时从 1-tiered 层提升一个 Cubby 作为新 tail，并可能触发拆分。tier 调度、tail 不变量与 k-kick 踢出规则共同构成第三章的算法主体\cite{bender2022otsh,bender2024sosa,conway2018,pandey2023iceberght}。
+
+\section{商压缩的信息论思想}
+
+若于槽位中完整保存原始键，则部分信息与寻址过程重复。商压缩借助双射函数 \(\pi\)，映射 \(x\) 为 \(\pi(x)\)，低 \(\log N\) 位 \(\pi(x)[1,\log N]=g^\ast(x)\) 的各位段交由地址上下文（Facility 编号、Cubby 容量、槽位下标）与局部元数据分担，槽位仅保存 payload 即 \(\pi(x)[\log N+1,\log U]\) 及无法由上下文恢复的差分信息。
+
+具体地，当 storage\([i]\) 存放键 \(x\) 对应信息时，MiniArray \(B[i]\) 保存
+\[
+  \delta=g_I(x)-i,
+\]
+以及 \(g^\ast(x)[\log|I|+1,\log K]\) 的中间位。配合 Facility 编号 \(r=g^\ast(x)[\log K+1,\log N]\) ，即可重建
+\[
+  g^\ast(x)[1,\log N],
+\]
+再加上 payload 得到 \(\pi(x)\)，经 \(\pi^{-1}\) 恢复 \(x\)。该编码方式与紧凑检索结构\cite{pagh2008retrieval,lehmann2026mphsurvey}、打包式哈希表\cite{kurpicz2023pachash,hermann2024phobic} 所强调的“按条目实际长度计费”一脉相承；但在 k-kick 动态搬移与 tier 重建下，\(B\)、\(A\) 与 \(M\) 必须同步更新，对 MiniArray 与 Local Query Router 的在线维护提出了较静态紧凑哈希更严格的要求\cite{bender2022otsh,kuszmaul2024filters}。
+
+\section{k-kick、MiniArray 与 Local Query Router 的理论角色}
+
+\subsection{k-kick：逻辑分层与交换上界}
+
+在 Cubby 内部，k-kick 并不引入物理上的多层数组，而是将 storage 上长度为 \(|I|\) 的连续槽位按固定规则划分为 \(k+1\) 个逻辑深度：深度 0 的 bin （ bin 指的是Cubby 按不同深度划分的子区间）覆盖整个 Cubby，更深层 bin 由上一层均匀切分得到，规模 \(s_i=\Theta((\log^{(i)}K)^6)\)。对键 \(x\)（此处均指 \(\pi(x)\)）定义偏好序列
+\[
+  g_0(x)\rightarrow g_1(x)\rightarrow\cdots\rightarrow g_k(x),
+\]
+其中 \(g_0(x)\) 为整个 Cubby，\(g_{i+1}(x)\) 为 \(g_i(x)\) 经均匀切分后 \(x\) 所属的子 bin。探测位置序列 \(h_1(x),h_2(x),\ldots\) 按\emph{先深后浅}顺序枚举各 bin 内槽位；若元素最终落在第 \(j\) 个候选位置，则其探测复杂度为 \(\Theta(1+\log j)\)。
+
+定义 Cubby 某一个 bin 饱和 IsSaturated 的定义为：bin 已满且其中每个元素的 insert\_depth \(\ge \) bin 对应的深度， 贪心思维下函数GetMaxUsableDepth(x) 为 x 可以插入的且未饱和的最大的 bin 的深度。插入时，系统先取随机哈希 \(s(x)\in[0,k]\)，再令
+\[
+  \mathrm{depth}=\min\bigl(\Call{GetMaxUsableDepth}{x},\,s(x)\bigr),
+\]
+在 bin \(g_{\mathrm{depth}}(x)\) 内写入；若 bin 已满，则踢出其中 insert\_depth 最小的元素并调用 ReInsert 向上安置。深度 \(d\) 下 bin \emph{饱和}的定义为：bin 已满且其中每个元素的 insert\_depth \(\ge d\)。Bender 等人\cite{bender2022otsh}证明：在参数满足其设定时，整条踢出链至多 \(k\) 次，单次插入的交换成本为 \(O(k)\)；配合随机深度选择，平均探测复杂度可控制在 \(O(\log^{(k)}n)\) 量级，从而与 上述描述的空间—时间权衡曲线对齐\cite{pagh2004cuckoo,lehmann2023sichash,pagh2004linear}。
+
+\subsection{MiniArray \(M\)：空闲 bin 的常数时间判定}
+
+k-kick 的 IsSaturated、GetMaxUsableDepth 与 ReInsert 均需在 bin 粒度上判定“是否含空位”并定位空位。MiniArray \(M\) 为各深度 bin 维护等价于 bitmap 的空闲槽位图，使上述判定与定位在均摊意义下为常数时间，而不必扫描整个 Cubby\cite{bender2022otsh,pagh2004linear}。Facility 级 MiniArray 则通过 \(O(1)\) 深度 B 树、叶内 Rank/Select 与 Packed Leaf，在变长元数据上实现均摊常数时间的 Access/Insert/Delete/Update\cite{bayer1972,jacobson1989,pagh2001}：树高 \(O(1)\)，内部指针 \(\Theta(\log\log n)\) 比特，叶分裂/合并保证均摊平摊\cite{kurpicz2023pachash,lehmann2024shockhash}。
+
+\subsection{Local Query Router：\(O(1)\) 查询与映射存储}
+
+偏好序列与探测位置序列在插入阶段完整定义；为实现 $O(1)$ 查询，须额外维护键到探测下标的映射，而不遍历 $h_1(x), h_2(x), \dots$：k-kick 插入会搬移元素，其实际位置既不等于首选位置 $g_k(x)$，也不等于 $h_1(x)$。Local Query Router 因此为每个键保存映射
+\[
+  \pi(x)\longrightarrow j,
+\]
+其中 \(j\) 为探测序列下标。Cubby 内令 \(g_I(x)=g^\ast(x)[1,\log|I|]\)，所有满足 \(g_I(x)=i\) 的键由 router \(A[i]\) 管理；\(A[i]\) 实现为二叉前缀树（可进一步 Patricia 压缩\cite{morrison1968,lehmann2025combined}），对外接口为 insert(key, j)、query(key)、delete(key)。查询时先算 \(i=g_I(x)\)，在 \(A[i]\) 得 \(j\)，再访问 \(h_j(x)\) 并用 \(B\) 与 payload 校验；\(j\le\log K\)，每条映射仅需 \(O(\log\log n)\) 比特，查询路径为常数次 router 与 MiniArray 访问\cite{bender2022otsh,pagh2008retrieval}。
+
+\subsection{辅助结构同步不变量}
+
+元素在 k-kick 踢出链中每发生一次搬移，须同步更新四处状态：
+\begin{itemize}
+  \item storage 槽位内容与 insert\_depth；
+  \item \(B[i]\) 中的 \(\delta\) 与中间位；
+  \item \(A[g_I(x)]\) 中 \(\pi(x)\mapsto j\) 的映射；
+  \item \(M\) 中各 bin 的空闲位图。
+\end{itemize}
+删除非 tail 元素时的 tail 随机回填、tier 合并/拆分后的全量重插，以及表级双表扩缩容，均遵循同一同步规则——不可仅复制 payload 而忽略 router 与 \(B\) 的上下文依赖\cite{bender2022otsh,bender2024sosa}。第三章将给出 MiniArray、k-kick 与 Local Query Router 的全部算法伪代码及统一操作语义。
+
+\section{本章小结}
+
+本章建立了后文所需的理论语境：球槽分配模型给出探测复杂度与交换成本的定义\cite{knuth1973sorting,aamand2021dynamic}；全域参数与 \(g^\ast(x)\) 位段划分明确了地址语义；Facility--Cubby--storage--\(A/M/B\) 层级关系给出整体骨架；商压缩说明 payload 与 \(B[i]\) 的信息分工\cite{bender2022otsh,lehmann2025combined}；同时从 k-kick 交换上界、MiniArray \(M\) 的空闲判定、Local Query Router 的 \(O(1)\) 查询及四路同步不变量四个角度，为第三章算法设计提供理论锚点。下一章将给出各模块的完整伪代码；第四章则报告宏基准与参数扫描下的性能测量。

@@ -1,53 +1,33 @@
-# OTSH Hash Backend (C++ / CMake)
+# OTSH — 面向实践的紧凑哈希表（本地测试版）
+
+依据《系统重构方案 v1》实现的 Facility / Cubby / k-kick / Local Query Router 原型。
 
 ## 依赖
 
 - CMake ≥ 3.20
 - C++20 编译器
-- MySQL/MariaDB client dev
 
 ## 构建
 
-```bash
+```powershell
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ```
 
-## 自动化测试
+产物：`otsh_tests`（单元测试）、`otsh_experiment`（第四章实验）。
 
-可执行文件 `otsh_tests`：对哈希表做初始化、批量插入/查询/删除等检查；
-跑完后打印一行 JSON，并尽量写入 MySQL 表 `otsh_test_session_log`
-
-- Windows：
+## 单元测试
 
 ```powershell
-.\scripts\run_tests.ps1
+.\build\otsh_tests.exe
 ```
 
-环境变量与 HTTP 后端一致，使用 `OTSH_MYSQL_*`；文本日志默认仓库根目录 `test_output/test_session.log`，可用 `OTSH_TEST_LOG` 覆盖。
-
-启动 HTTP 服务：
+## 第四章实验（口径见 experiments/out.log）
 
 ```powershell
-.\build\otsh_backend.exe
+.\experiments\run.ps1 -Quick
+.\experiments\run.ps1
+.\build\otsh_experiment.exe --group=all --quick --seed=1
 ```
 
-\chapter{引言}
-
-\section{研究背景及意义}
-
-哈希表是一种通过哈希函数把关键字映射到数组相应位置的结构，它在数据库索引，键值存储，编译器符号表以及运行时系统等常见基础架构中被广泛应用。相较于链地址法，开放寻址希表将元素直接放置在连续数组中，其查询路径相对较短，缓存局部性表现更优；但是当负载因子上升时，冲突及探测长度会快速影响操作成本。在实际工程操作中，常采用预留空槽的方式以降低冲突发生几率，但是这也会致使单位元素所占据的附加空间有所增加。因此哈希表的设计需解决如下具体问题：在确保查询插入及删除操作时间可有效控制的基础上，如何减少每个元素为实现定位，更新与恢复而额外存储的信息量。
-
-论文《On the Optimal Time/Space Tradeoff for Hash Tables》从理论层面阐述了前面提到的问题\cite{pagh2021otsh}，这篇论文提到，在只能花费常数时间执行查询的前提下，如果插入和删除要承担\(O(k)\)个元素的交换代价时，每个元素所占的额外空间就能从\(O(\log\log n)\)比特缩减到\(O(\log^{(k)}n)\)比特\footnote{本文探讨的空间开销都是按照比特计算的}\footnote{符号 \(\log^{(k)}n\) 就是连续对 \(n\) 取 \(k\) 次对数，也就是 \(\log\log\cdots\log n\)（一共 \(k\) 个 \(\log\)）。}，这个结果说明，开放寻址哈希表的空间利用率并非仅仅取决于空位占比，而且和元素转移，局部引导以及键重建信息的编码方法存在紧密联系，凭借此理论研究，本文针对Facility，Cubby，Router，MiniArray，商用压缩以及渐次转移等主要架构展开简化重现并加以实现，再经由测试考察这些架构在关键操作流程中的真实运行状况。
-
-\section{国内外研究现状}
-
-哈希表实现主要包括经典的链地址法和开放寻址法。链地址法借助链表或者桶结构来处理冲突，以达成直接的效果；但是指针，动态分配以及额外的桶结构会引发空间和缓存方面的开销。开放寻址法将元素放置于数组槽位之中，其访问局部性较为突出；但是性能会受到负载因子，探针序列以及删除策略的较大影响\cite{cormen2009introduction}。在此基础上，布谷鸟哈希通过多个候选位置和踢出过程缩短查询路径\cite{pagh2004cuckoo}，完美哈希面向静态集合提供更强的查找保证\cite{fredman1984sparse}。这些结构分别对查询的确定性，构造途径或空间的利用效率起到改善作用，但是在动态进行插入，删除操作与拥有较低附加空间这两者之间，仍然存在难以同时满足的限制条件。
-
-近年来理论性的探讨进一步将聚焦点推进到关于位级空间开销的层面上。仅仅依靠负载因子衡量空间利用率，无法充分解释紧凑哈希表的成本，原因是系统还需留存用于支持查询，更新以及键恢复的辅助信息。在这一视角下所提出的正是本文所参考的最优希表理论，该理论把元素的放置看作球槽分配问题，并且借助k-kick树，Local Query Router，MiniArray以及商压缩来组合出新型的时间-空间权衡方式。本文的工作范畴限定于工程方面的实现以及实验层面的观察，即围绕这些可实现的结构开展简化的复现工作，简化的理论机制，以及此类简化对实验结果解读产生的影响。
-
-\section{研究路线}
-
-该文以《OntheOptimalTime/SpaceTradeoffforHashTables》中的关键构造为核心，进行简化的复刻以及实际的应用推广。系统借助Facility--Cubby--Slot来组织局部存储，每个Facility维护一组Router，依靠这些Router将键精准定位到相应的Cubby和槽位；槽位中存储商压缩后的 payload\footnote{本文中的 payload 指槽位中保存的压缩后有效载荷，主要对应由 \(\pi(k)\) 拆出的高位商；它不等同于原始键，必须结合 MiniArray 中的元数据才能恢复用于校验的置换值。}，而MiniArray保存用于恢复 \(\pi(k)\) 所需的变长元数据；进行扩缩容操作时，采用active/old双表渐进迁移的方式。将重点置于插入，查询，删除，键的恢复以及迁移路径方面，同时记录踢出次数，Router的访问步数，元数据的位数等相关指标。
-
-本文针对三个相互联系的问题层层递进地展开议论，其一，当下的完成情况怎样，能否大批量执行数据插入，精确地实施目标查询，执行删除操作。其二，在实际运行过程中，插入移动的次数，Router访问的步数以及逻辑元数据的位数各有怎样的特性，其三，已有的成果同论文的框架相比作了哪些精简，这些精简又会给实验结论的应用范围带来什么样的局限。后续的章节里，第\ref{ch:theo_base}章论述论文《On the Optimal Time/Space Tradeoff for Hash Tables》相关的理论根基，第\ref{ch:system}章显示系统的规划与达成情况，第\ref{ch:exp}章报告功能检测及微基准的结果，第\ref{ch:concl}章归纳已开展的工作，并根据实现的哈希系统和论文所达成的目标之间的差距当作参照去探究后续值得改进的方向。
+参数说明见 `experiments/presets.json`。

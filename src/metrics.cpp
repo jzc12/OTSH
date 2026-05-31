@@ -121,11 +121,19 @@ void Metrics::on_ht_delete_ns(uint64_t ns) {
                  ht_delete_b_, ns);
 }
 
-void Metrics::on_rebuild_down() {
+void Metrics::on_rebuild_down(uint64_t elapsed_ns) {
   ev_rebuild_down_.fetch_add(1, std::memory_order_relaxed);
+  if (elapsed_ns > 0) {
+    rebuild_elapsed_ns_total_.fetch_add(elapsed_ns, std::memory_order_relaxed);
+    atomic_max(rebuild_elapsed_ns_max_, elapsed_ns);
+  }
 }
-void Metrics::on_rebuild_up() {
+void Metrics::on_rebuild_up(uint64_t elapsed_ns) {
   ev_rebuild_up_.fetch_add(1, std::memory_order_relaxed);
+  if (elapsed_ns > 0) {
+    rebuild_elapsed_ns_total_.fetch_add(elapsed_ns, std::memory_order_relaxed);
+    atomic_max(rebuild_elapsed_ns_max_, elapsed_ns);
+  }
 }
 void Metrics::on_resize_start() {
   ev_resize_start_.fetch_add(1, std::memory_order_relaxed);
@@ -151,6 +159,10 @@ Metrics::Snapshot Metrics::snapshot() const {
 
   s.meta_bits_total = meta_bits_total_.load(std::memory_order_relaxed);
   s.meta_bits_max = meta_bits_max_.load(std::memory_order_relaxed);
+  s.rebuild_elapsed_ns_total =
+      rebuild_elapsed_ns_total_.load(std::memory_order_relaxed);
+  s.rebuild_elapsed_ns_max =
+      rebuild_elapsed_ns_max_.load(std::memory_order_relaxed);
 
   auto fill_lat = [&](LatencySummary &out,
                       const std::atomic<uint64_t> &cnt,

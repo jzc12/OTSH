@@ -1,31 +1,25 @@
 \chapter{总结与展望}
-
 \label{ch:concl}
 
 \section{工作总结}
 
-本文就 Bender 等人\cite{bender2022otsh}在《On the Optimal Time/Space Tradeoff for Hash Tables》中提出的主要结构展开论述，并精简设计出一个哈希系统，该系统把 HashTable 设作入口，内部按照 Facility，Cubby，Slot 这三层来组织元素；设计一个可逆的哈希函数；利用 Router 来维持局部键与槽位之间的映射关系；在槽位处存储经过商压缩之后的 payload；凭借 MiniArray 来保留用于恢复 \(\pi(x)\) 的 MetaEntry；在执行扩缩容操作的时候则采取 active/old 双表逐步过渡的方式。
+本文以 Bender 等人提出的最优时间/空间权衡框架\cite{bender2022otsh}为理论基础，完成了分层哈希表的结构与算法设计，并据此实现简化系统、开展性能实验。系统设计与实验过程中，困难点在于将论文中不同的模块的理论模型落地实现，并将不同的模块进行组合，形成一个完整的系统，同时各参数的取值需要进行实验验证，以保证系统能够正常运行。
 
-功能检测覆盖初始化、插入、查询、删除、删后查询与重复插入等路径。性能检测在 \(n\ge 10^4\) 的多组 \((n,N,K)\) 配置下开展：命中查询 p50 在 $2.9$--$5\,\mu$s 量级，插入 p50 约 $10$--$15\,\mu$s ，insert\_moved\_max 与 router\_steps\_max 均不超过 6，与第三章有界路由及工程版 k-kick 的设计一致。
+在设计层面，第二、三章给出了 Facility--Cubby--Slot 分层组织、 MiniArray、Cubby 内部的 k-kick 树、Local Query Router 与商压缩等模块的完整方案。MiniArray 用 B 树与 Rank/Select 维护变长元数据；k-kick 逻辑上在不同 bins 之间以有限次交换完成插入；Local Query Router 通过前缀树将查询映射到目标槽位；各模块经 storage、MiniArray $B$、MiniArray $M$ 与 Local Query Router 的同步更新保持一致性。
+
+在实验层面，第四章在 \(K=\log^3 n\)、\(k=4\)、\(c=2\) 等基准配置下完成 \(n\)、\(K\)、\(k\) 及 Cubby 重构四组测量：\(n\) 从 \(10^3\) 增至 \(10^5\) 时查询延迟由 2.8\,$\mu$s 升至 6.1\,$\mu$s，增删与 rebuild 随规模上升而更活跃；纯插入与纯删除 workload 分别体现 rebuild\_up 与 rebuild\_down 主导；kick 深度增大时 insert\_moved\_max 不超过 \(k\)，与第二章交换上界一致。
+
+综上，本文完成了从理论结构到可运行原型的设计与实现，明确了工程简化相对严格模型的差异界限，为相关研究提供了实验数据与参考。
 
 \section{不足与局限}
 
-本文存在一些不足与局限之处，与论文中的完整理论结构相比仍有所差距，主要体现在以下方面：
-\begin{enumerate}
-  \item k-kick 机制：当前实现已在单个 Cubby 内达成有界踢出链，但尚未完整模拟论文中的 k-kick 树层次结构；实验中的 kick\_count 反映的是代码层面的搬移次数，不能直接等同于理论交换成本。
-  \item Facility 层重建：虽具备多 tiered Cubby、tail 维护及拆分/合并接口，但调度器每次执行完整重建，未将 \(O(|I|)\) 级任务细分为严格的后台步骤；tiered 上限与容量参数仍属工程设定，尚不足以支撑理论均摊界的论证。
-  \item MiniArray 与 Router 更新：两者保留了变长编码与局部路由的接口语义，但更新分别依赖全局重打包与整树重建，未达到论文所要求的常数时间局部更新。
-  \item 空间统计：meta\_bits\_total、Router 编码位数等指标仅反映逻辑编码规模，未计入 vector 指针、对象头等运行时内存开销，不能作为严格空间上界的证明依据。
-\end{enumerate}
+受时间与实验条件限制，本文仍存在以下不足：
+\begin{itemize}
+  \item 未与 IcebergHT\cite{pandey2023iceberght}、PaCHash\cite{kurpicz2023pachash} 等同类系统进行同机对比，尚难从相对角度评价本原型的工程竞争力；
+  \item 插入与删除延迟显著高于查询（如 \(n=10^5\) 时分别为 51.2\,$\mu$s、197.3\,$\mu$s 对比 6.1\,$\mu$s），与 MiniArray 维护、k-kick 踢出及 tier 重构等热路径实现相关，仍有优化空间；
+  \item 实验 workload 以键均匀分布的混合增删为主，对键偏斜、超大规模长跑及 active/old 双表渐进迁移等场景覆盖不足，结论外推范围仍受测量口径限制。
+\end{itemize}
 
-实验范围仍存在局限：虽已在 \(n\in[1.5\times10^4,10^5]\) 上扫过多组 \((N,K)\)，但未变化负载因子与随机种子分布，也未与标准库、IcebergHT\cite{pandey2023iceberght} 或其它紧凑哈希实现\cite{kurpicz2023pachash,lehmann2024shockhash} 对比，结论仅适用于当前实现策略下的行为刻画，不能外推为通用哈希表的最优性能。
+\section{展望}
 
-\section{可改进方向}
-
-针对上述不足，后续工作可从以下方向推进：
-\begin{enumerate}
-  \item 在 Cubby 内完整实现 k-kick 树结构，使其与论文中的层级控制及失败处理机制相衔接。
-  \item 细化 Facility 层后台重建调度，将拆分/合并拆为可分步执行的任务，并重新校准 tiered 上限、\(t_j\) 与 Cubby 容量公式。
-  \item 改进 MiniArray 与 Router 的增量更新策略，降低重打包与整树重建带来的开销，并区分逻辑编码位数与实际内存占用。
-  \item 扩展测试覆盖面：增加负载因子、随机种子等控制变量，补充与标准实现的对比实验及可视化分析，更充分地刻画系统的时间与空间行为。
-\end{enumerate}
+后续工作可从以下几方面展开：在更大规模与偏斜负载下观察 tier 重建与双表迁移对尾延迟的影响；对插入、删除热路径做针对性优化；选取一至两个紧凑哈希开源实现进行同机对比；补充进程级内存与吞吐的端到端测量，更全面地评估空间--时间权衡\cite{kurpicz2023pachash,lehmann2026mphsurvey}。

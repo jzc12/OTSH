@@ -1,6 +1,7 @@
 # --- CMake / C++ build outputs ---
 /build/
 /test_output/
+/experiments/ch4_*.log
 **/CMakeFiles/
 **/CMakeCache.txt
 **/cmake_install.cmake

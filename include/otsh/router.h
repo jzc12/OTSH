@@ -26,7 +26,11 @@ public:
   bool contains(uint64_t key) const;
   uint64_t insert(uint64_t key, Value v);
   uint64_t erase(uint64_t key);
+  // 移除所有指向 cb 的路由项（cubby 销毁 / rebuild 前调用）。
+  void erase_cubby(const Cubby *cb);
   void clear();
+
+  size_t entry_count() const { return entries_.size(); }
 
   // 编码后的 bitstream 大小（用于空间统计）。
   uint64_t bits_total() const { return static_cast<uint64_t>(encoded_bits_); }

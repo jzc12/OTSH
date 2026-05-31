@@ -1,5 +1,6 @@
 #pragma once
 
+#include "otsh/mini_array.h"
 #include "otsh/router.h"
 
 #include <memory>
@@ -9,18 +10,18 @@ namespace otsh {
 
 struct Cubby;
 
-// Facility 聚合多 tier cubbies + 顶层 router + 唯一 tail。
+// §1.2 / §2 Facility：聚合多 tier cubbies + §2.1 facility mini-array。
 struct Facility {
-  // 多 tier cubbies
   std::vector<std::vector<std::unique_ptr<Cubby>>> tiers;
   int max_tier = 0;
 
-  // tail：唯一允许非满的 cubby（默认在 tier=0）。
-  int tail_tier = 0;
-  Cubby *tail = nullptr;             // 尾 cubby 指针
-  std::unique_ptr<Cubby> tail_owned; // 尾 cubby 独占所有权
+  int tail_tier = 0; // tiers[tail_tier] 为 1-tiered cubby 集合（恒为 tiers[0]）
+  Cubby *tail = nullptr;
+  std::unique_ptr<Cubby> tail_owned;
 
-  // 设计文档：D[b] 为 LocalQueryRouter，键经 g* 低位拆出桶索引 b。
+  // §2.1：K 桶 facility mini-array（每桶路由表项数 + 编码位宽摘要）
+  MiniArray ma;
+  // D[b]：g*(x) mod K = b 时 key 的 (cubby, slot) 定位
   std::vector<Router> D;
 };
 

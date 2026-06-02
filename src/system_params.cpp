@@ -122,12 +122,13 @@ TableParams apply_derived(const TableParams &base, const DerivedParams &d) {
 }
 
 size_t kkick_bin_size(int depth_i, uint64_t K, uint64_t n_hint) {
-  (void)K;
-  // §4.2 / §6.3：s_0 = log^3 n；s_i = (log^(i) n)^6，i ≥ 1（嵌套切分时再按父 bin 截断）
-  double logv = std::log2(static_cast<double>(std::max<uint64_t>(2, n_hint)));
+  (void)n_hint;
+  const uint64_t base_K = std::max<uint64_t>(1, K);
+  // §4.1：s_0 = K；s_i = Θ((log^(i) K)^6)，i ≥ 1。嵌套切分时再按父 bin 截断。
   if (depth_i <= 0)
-    return static_cast<size_t>(std::max(1.0, std::floor(std::pow(logv, 3.0))));
-  for (int t = 1; t < depth_i; ++t)
+    return static_cast<size_t>(base_K);
+  double logv = static_cast<double>(std::max<uint64_t>(2, base_K));
+  for (int t = 0; t < depth_i; ++t)
     logv = std::log2(std::max(2.0, logv));
   return static_cast<size_t>(std::max(1.0, std::floor(std::pow(logv, 6.0))));
 }

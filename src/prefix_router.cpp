@@ -1,168 +1,185 @@
 #include "otsh/prefix_router.h"
 
+#include <algorithm>
 #include <vector>
 
-namespace otsh {
-namespace {
+namespace otsh
+{
+    namespace
+    {
 
-struct Node {
-  int child0 = -1;
-  int child1 = -1;
-  bool is_leaf = false;
-  uint32_t j_value = 0;
-  uint64_t key_bits = 0;
-};
+        struct Entry
+        {
+            uint64_t key_bits = 0;
+            uint32_t j_value = 0;
+        };
 
-int walk(const std::vector<Node> &nodes, int root, uint64_t key_bits) {
-  if (root < 0)
-    return -1;
-  int cur = root;
-  for (int bit = 63; bit >= 0; --bit) {
-    const bool b = ((key_bits >> bit) & 1ULL) != 0;
-    const Node &n = nodes[static_cast<size_t>(cur)];
-    const int child = b ? n.child1 : n.child0;
-    if (child < 0)
-      return -1;
-    cur = child;
-  }
-  return cur;
-}
+        struct Node
+        {
+            int left = -1;
+            int right = -1;
+            int entry_idx = -1;
+            uint8_t split_bit = 0;
+        };
 
-static int first_diff_bit(uint64_t a, uint64_t b) {
-  if (a == b)
-    return -1;
-  uint64_t x = a ^ b;
-  int msb = 63;
-  while (msb >= 0 && ((x >> msb) & 1ULL) == 0)
-    msb--;
-  return msb;
-}
+        bool bit_at(uint64_t bits, int bitpos)
+        {
+            return ((bits >> (63 - bitpos)) & 1ULL) != 0;
+        }
 
-static void split_leaf(std::vector<Node> &nodes, int leaf_idx, uint64_t old_key,
-                       uint32_t old_j, uint64_t new_key, uint32_t new_j) {
-  const int diff = first_diff_bit(old_key, new_key);
-  if (diff < 0) {
-    nodes[static_cast<size_t>(leaf_idx)].j_value = new_j;
-    return;
-  }
-  nodes[static_cast<size_t>(leaf_idx)].is_leaf = false;
-  nodes[static_cast<size_t>(leaf_idx)].j_value = 0;
-  nodes[static_cast<size_t>(leaf_idx)].key_bits = 0;
-  const size_t base = nodes.size();
-  nodes.push_back({-1, -1, true, old_j, old_key});
-  nodes.push_back({-1, -1, true, new_j, new_key});
-  const int leaf_old = static_cast<int>(base);
-  const int leaf_new = static_cast<int>(base + 1);
-  const bool old_bit = ((old_key >> diff) & 1ULL) != 0;
-  if (old_bit) {
-    nodes[static_cast<size_t>(leaf_idx)].child1 = leaf_old;
-    nodes[static_cast<size_t>(leaf_idx)].child0 = leaf_new;
-  } else {
-    nodes[static_cast<size_t>(leaf_idx)].child0 = leaf_old;
-    nodes[static_cast<size_t>(leaf_idx)].child1 = leaf_new;
-  }
-}
+    } // namespace
 
-} // namespace
+    struct PrefixRouter::Impl
+    {
+        std::vector<Entry> entries;
+        std::vector<Node> nodes;
+        int root = -1;
 
-struct PrefixRouter::Impl {
-  std::vector<Node> nodes;
-  int root = -1;
-};
+        int build_range(std::vector<int> &idxs, int l, int r, int bit_lo)
+        {
+            if (l >= r)
+                return -1;
+            if (r - l == 1)
+            {
+                Node leaf;
+                leaf.entry_idx = idxs[l];
+                nodes.push_back(leaf);
+                return static_cast<int>(nodes.size() - 1);
+            }
 
-PrefixRouter::PrefixRouter() : impl_(std::make_unique<Impl>()) {}
+            int split = -1;
+            int mid = l;
+            for (int bit = bit_lo; bit < 64; ++bit)
+            {
+                mid = l;
+                for (int i = l; i < r; ++i)
+                {
+                    if (!bit_at(entries[static_cast<size_t>(idxs[i])].key_bits, bit))
+                    {
+                        std::swap(idxs[static_cast<size_t>(mid)], idxs[static_cast<size_t>(i)]);
+                        ++mid;
+                    }
+                }
+                if (mid != l && mid != r)
+                {
+                    split = bit;
+                    break;
+                }
+            }
+            if (split < 0)
+            {
+                Node leaf;
+                leaf.entry_idx = idxs[l];
+                nodes.push_back(leaf);
+                return static_cast<int>(nodes.size() - 1);
+            }
 
-PrefixRouter::PrefixRouter(const PrefixRouter &o)
-    : impl_(o.impl_ ? std::make_unique<Impl>(*o.impl_) : nullptr) {}
+            Node nd;
+            nd.split_bit = static_cast<uint8_t>(split);
+            nodes.push_back(nd);
+            const int self = static_cast<int>(nodes.size() - 1);
+            nodes[static_cast<size_t>(self)].left = build_range(idxs, l, mid, split + 1);
+            nodes[static_cast<size_t>(self)].right = build_range(idxs, mid, r, split + 1);
+            return self;
+        }
 
-PrefixRouter &PrefixRouter::operator=(const PrefixRouter &o) {
-  if (this == &o)
-    return *this;
-  impl_ = o.impl_ ? std::make_unique<Impl>(*o.impl_) : nullptr;
-  return *this;
-}
+        void rebuild()
+        {
+            nodes.clear();
+            root = -1;
+            std::vector<int> idxs;
+            idxs.reserve(entries.size());
+            for (size_t i = 0; i < entries.size(); ++i)
+                idxs.push_back(static_cast<int>(i));
+            root = build_range(idxs, 0, static_cast<int>(idxs.size()), 0);
+        }
+    };
 
-PrefixRouter::~PrefixRouter() = default;
+    PrefixRouter::PrefixRouter() : impl_(std::make_unique<Impl>()) {}
 
-PrefixRouter::PrefixRouter(PrefixRouter &&) noexcept = default;
+    PrefixRouter::PrefixRouter(const PrefixRouter &o)
+        : impl_(o.impl_ ? std::make_unique<Impl>(*o.impl_) : nullptr) {}
 
-PrefixRouter &PrefixRouter::operator=(PrefixRouter &&) noexcept = default;
+    PrefixRouter &PrefixRouter::operator=(const PrefixRouter &o)
+    {
+        if (this == &o)
+            return *this;
+        impl_ = o.impl_ ? std::make_unique<Impl>(*o.impl_) : nullptr;
+        return *this;
+    }
 
-bool PrefixRouter::insert(uint64_t key_bits, uint32_t j) {
-  if (!impl_)
-    impl_ = std::make_unique<Impl>();
-  auto &nodes = impl_->nodes;
-  if (nodes.empty()) {
-    nodes.push_back(Node{});
-    impl_->root = 0;
-  }
-  int cur = impl_->root;
-  for (int bit = 63; bit >= 0; --bit) {
-    const bool b = ((key_bits >> bit) & 1ULL) != 0;
-    if (nodes[static_cast<size_t>(cur)].is_leaf) {
-      const uint64_t existing = nodes[static_cast<size_t>(cur)].key_bits;
-      if (existing == key_bits) {
-        nodes[static_cast<size_t>(cur)].j_value = j;
+    PrefixRouter::~PrefixRouter() = default;
+
+    PrefixRouter::PrefixRouter(PrefixRouter &&) noexcept = default;
+
+    PrefixRouter &PrefixRouter::operator=(PrefixRouter &&) noexcept = default;
+
+    bool PrefixRouter::insert(uint64_t key_bits, uint32_t j)
+    {
+        if (!impl_)
+            impl_ = std::make_unique<Impl>();
+        for (auto &e : impl_->entries)
+        {
+            if (e.key_bits == key_bits)
+            {
+                e.j_value = j;
+                impl_->rebuild();
+                return true;
+            }
+        }
+        impl_->entries.push_back(Entry{key_bits, j});
+        impl_->rebuild();
         return true;
-      }
-      split_leaf(nodes, cur, existing,
-                 nodes[static_cast<size_t>(cur)].j_value, key_bits, j);
-      return true;
     }
-    int child = b ? nodes[static_cast<size_t>(cur)].child1
-                  : nodes[static_cast<size_t>(cur)].child0;
-    if (child < 0) {
-      nodes.push_back(Node{});
-      child = static_cast<int>(nodes.size() - 1);
-      if (b)
-        nodes[static_cast<size_t>(cur)].child1 = child;
-      else
-        nodes[static_cast<size_t>(cur)].child0 = child;
+
+    bool PrefixRouter::erase(uint64_t key_bits)
+    {
+        if (!impl_)
+            return false;
+        auto it = std::remove_if(impl_->entries.begin(), impl_->entries.end(),
+                                 [&](const Entry &e)
+                                 { return e.key_bits == key_bits; });
+        const bool erased = it != impl_->entries.end();
+        if (erased)
+        {
+            impl_->entries.erase(it, impl_->entries.end());
+            impl_->rebuild();
+        }
+        return erased;
     }
-    cur = child;
-  }
-  nodes[static_cast<size_t>(cur)].is_leaf = true;
-  nodes[static_cast<size_t>(cur)].j_value = j;
-  nodes[static_cast<size_t>(cur)].key_bits = key_bits;
-  return true;
-}
 
-bool PrefixRouter::erase(uint64_t key_bits) {
-  if (!impl_)
-    return false;
-  const int cur = walk(impl_->nodes, impl_->root, key_bits);
-  if (cur < 0)
-    return false;
-  Node &leaf = impl_->nodes[static_cast<size_t>(cur)];
-  if (!leaf.is_leaf || leaf.key_bits != key_bits)
-    return false;
-  leaf.is_leaf = false;
-  leaf.j_value = 0;
-  leaf.key_bits = 0;
-  return true;
-}
+    std::optional<uint32_t> PrefixRouter::query(uint64_t key_bits) const
+    {
+        if (!impl_ || impl_->root < 0)
+            return std::nullopt;
+        int cur = impl_->root;
+        while (cur >= 0)
+        {
+            const Node &n = impl_->nodes[static_cast<size_t>(cur)];
+            if (n.entry_idx >= 0)
+            {
+                const Entry &e = impl_->entries[static_cast<size_t>(n.entry_idx)];
+                if (e.key_bits == key_bits)
+                    return e.j_value;
+                return std::nullopt;
+            }
+            cur = bit_at(key_bits, n.split_bit) ? n.right : n.left;
+        }
+        return std::nullopt;
+    }
 
-std::optional<uint32_t> PrefixRouter::query(uint64_t key_bits) const {
-  if (!impl_)
-    return std::nullopt;
-  const int cur = walk(impl_->nodes, impl_->root, key_bits);
-  if (cur < 0)
-    return std::nullopt;
-  const Node &leaf = impl_->nodes[static_cast<size_t>(cur)];
-  if (!leaf.is_leaf || leaf.key_bits != key_bits)
-    return std::nullopt;
-  return leaf.j_value;
-}
+    void PrefixRouter::clear()
+    {
+        if (!impl_)
+            return;
+        impl_->entries.clear();
+        impl_->nodes.clear();
+        impl_->root = -1;
+    }
 
-void PrefixRouter::clear() {
-  if (!impl_)
-    return;
-  impl_->nodes.clear();
-  impl_->root = -1;
-}
-
-size_t PrefixRouter::node_count() const {
-  return impl_ ? impl_->nodes.size() : 0;
-}
+    size_t PrefixRouter::node_count() const
+    {
+        return impl_ ? impl_->nodes.size() : 0;
+    }
 
 } // namespace otsh

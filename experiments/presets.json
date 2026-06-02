@@ -1,54 +1,129 @@
 {
-  "description": "Ch4 实验：表1 n=10^3…10^5；表2–4 各跑 1e3/1e4/1e5 三档（预设名后缀 _1e3/_1e4/_1e5）",
-  "groups": {
-    "n": {
-      "presets": ["n_1e3", "n_1e4", "n_1e5"],
-      "K": "log^3 n",
-      "k": 4,
-      "workload": "uniform_mixed",
-      "metrics": ["ins_us", "qry_us", "del_us", "kick", "rebuild_down", "rebuild_up", "bits_per_key"]
+    "description": "Ch4 实验：表1 n=10^3…10^5；表2–4 各跑 1e3/1e4/1e5 三档（预设名后缀 _1e3/_1e4/_1e5）",
+    "groups": {
+        "n": {
+            "presets": [
+                "n_1e3",
+                "n_1e4",
+                "n_1e5"
+            ],
+            "K": "log^3 n",
+            "k": 4,
+            "workload": "uniform_mixed",
+            "metrics": [
+                "ins_us",
+                "qry_us",
+                "del_us",
+                "kick",
+                "rebuild_down",
+                "rebuild_up",
+                "bits_per_key"
+            ]
+        },
+        "Kfixed": {
+            "presets_1e3": [
+                "K256_1e3",
+                "K4096_1e3",
+                "K65536_1e3"
+            ],
+            "presets_1e4": [
+                "K256_1e4",
+                "K4096_1e4",
+                "K65536_1e4"
+            ],
+            "presets_1e5": [
+                "K256_1e5",
+                "K4096_1e5",
+                "K65536_1e5"
+            ],
+            "K_1e3": [
+                16,
+                64,
+                256
+            ],
+            "K_1e4": [
+                64,
+                256,
+                1024
+            ],
+            "K_1e5": [
+                256,
+                1024,
+                4096
+            ],
+            "k": 4,
+            "workload": "uniform_mixed",
+            "metrics": [
+                "ins_us",
+                "qry_us",
+                "del_us",
+                "kick",
+                "bits_per_key"
+            ]
+        },
+        "k": {
+            "presets_1e3": [
+                "k3_1e3",
+                "k4_1e3",
+                "k5_1e3"
+            ],
+            "presets_1e4": [
+                "k3_1e4",
+                "k4_1e4",
+                "k5_1e4"
+            ],
+            "presets_1e5": [
+                "k3_1e5",
+                "k4_1e5",
+                "k5_1e5"
+            ],
+            "K_1e3": 64,
+            "K_1e4": 256,
+            "K_1e5": 4096,
+            "workload": "uniform_high_load",
+            "metrics": [
+                "ins_us",
+                "qry_us",
+                "del_us",
+                "kick",
+                "load_factor_pct"
+            ]
+        },
+        "tier": {
+            "presets_1e3": [
+                "tier_ch4_1e3"
+            ],
+            "presets_1e4": [
+                "tier_ch4_1e4"
+            ],
+            "presets_1e5": [
+                "tier_ch4_1e5"
+            ],
+            "K_1e3": 64,
+            "K_1e4": 256,
+            "K_1e5": 4096,
+            "k": 4,
+            "workloads": [
+                "insert",
+                "delete",
+                "mix8020",
+                "mix5050"
+            ],
+            "metrics": [
+                "rebuild_down",
+                "rebuild_up",
+                "rebuild_avg_ms"
+            ]
+        }
     },
-    "Kfixed": {
-      "presets_1e3": ["K256_1e3", "K4096_1e3", "K65536_1e3"],
-      "presets_1e4": ["K256_1e4", "K4096_1e4", "K65536_1e4"],
-      "presets_1e5": ["K256_1e5", "K4096_1e5", "K65536_1e5"],
-      "K_1e3": [16, 64, 256],
-      "K_1e4": [64, 256, 1024],
-      "K_1e5": [256, 1024, 4096],
-      "k": 4,
-      "workload": "uniform_mixed",
-      "metrics": ["ins_us", "qry_us", "del_us", "kick", "bits_per_key"]
+    "csv_tags": {
+        "K": "CH4_TABLE,K,{scale},{K},...",
+        "k": "CH4_TABLE,k,{scale},{k},...",
+        "tier": "CH4_TABLE,tier,{scale},{workload},..."
     },
-    "k": {
-      "presets_1e3": ["k3_1e3", "k4_1e3", "k5_1e3"],
-      "presets_1e4": ["k3_1e4", "k4_1e4", "k5_1e4"],
-      "presets_1e5": ["k3_1e5", "k4_1e5", "k5_1e5"],
-      "K_1e3": 64,
-      "K_1e4": 256,
-      "K_1e5": 4096,
-      "workload": "uniform_high_load",
-      "metrics": ["ins_us", "qry_us", "del_us", "kick", "load_factor_pct"]
-    },
-    "tier": {
-      "presets_1e3": ["tier_ch4_1e3"],
-      "presets_1e4": ["tier_ch4_1e4"],
-      "presets_1e5": ["tier_ch4_1e5"],
-      "K_1e3": 64,
-      "K_1e4": 256,
-      "K_1e5": 4096,
-      "k": 4,
-      "workloads": ["insert", "delete", "mix8020", "mix5050"],
-      "metrics": ["rebuild_down", "rebuild_up", "rebuild_avg_ms"]
+    "cli": {
+        "default": ".\\experiments\\run.ps1",
+        "all_scales": ".\\experiments\\run.ps1 -Scale all",
+        "single_scale": ".\\experiments\\run.ps1 -Scale 1e4 -Group Kfixed"
     }
-  },
-  "csv_tags": {
-    "K": "CH4_TABLE,K,{scale},{K},...",
-    "k": "CH4_TABLE,k,{scale},{k},...",
-    "tier": "CH4_TABLE,tier,{scale},{workload},..."
-  },
-  "cli": {
-    "default": ".\\experiments\\run.ps1",
-    "all_scales": ".\\experiments\\run.ps1 -Scale all",
-    "single_scale": ".\\experiments\\run.ps1 -Scale 1e4 -Group Kfixed"
-  }
 }

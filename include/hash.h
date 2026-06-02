@@ -2,9 +2,9 @@
 
 #include <cstdint>
 
-namespace otsh {
+namespace otsh
+{
 
-uint64_t splitmix64(uint64_t x);
+    uint64_t splitmix64(uint64_t x);
 
 } // namespace otsh
-

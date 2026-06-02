@@ -1,9 +1,0 @@
-__pycache__/
-*.pyc
-*.pyo
-.DS_Store
-.venv/
-venv/
-.idea/
-.vscode/
-.claude/settings.local.json

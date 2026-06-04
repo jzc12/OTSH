@@ -64,6 +64,7 @@ namespace
         uint64_t del_avg_ns = 0;
         uint64_t kick_total = 0;
         uint64_t kick_insert = 0; // 插入阶段踢出（K/k 组口径）
+        uint64_t insert_moved_max = 0; // 单次插入最大踢出/移动次数（metrics）
         uint64_t rebuild_down = 0;
         uint64_t rebuild_up = 0;
         double rebuild_avg_ms = 0.0;
@@ -227,9 +228,10 @@ namespace
         w.uniform_keys = true;
         if (group == otsh::ExperimentGroup::KKickDepth)
         {
-            w.deletes = w.inserts / 5;
+            // 与 K 固定组同口径：高负载填充后在插入峰值测 bpk（k 增大应降低
+            // Cubby 元数据 bits/key）；不再 insert_until_fail，避免 ~22% 低负载趋同。
+            w.deletes = w.inserts / 4;
             w.measure_at_insert_peak = true;
-            w.insert_until_fail = true;
         }
         else if (group == otsh::ExperimentGroup::KFixed)
         {
@@ -460,6 +462,8 @@ namespace
 
         if (w.measure_at_insert_peak)
         {
+            const otsh::Metrics::Snapshot m_ins = otsh::global_metrics().snapshot();
+            r.insert_moved_max = m_ins.insert_moved_max;
             r.kick_insert = r.kick_total;
             r.load_factor_pct = peak_load_pct(ht, d.N);
             r.final_n = ht.state().n;
@@ -549,6 +553,7 @@ namespace
                 r.final_n ? static_cast<double>(meta_bits) / r.final_n : 0.0;
             r.load_factor_pct = peak_load_pct(ht, d.N);
             storage_load_from_ht(ht, r.slots_occupied, r.slot_capacity);
+            r.insert_moved_max = m1.insert_moved_max;
         }
 
         r.ins_avg_ns = lat_ins.empty() ? 0 : median_u64(lat_ins);
@@ -578,7 +583,7 @@ namespace
         if (runs == 1)
             return out;
 
-        std::vector<uint64_t> ins, qry, del, kick, rdn, rup;
+        std::vector<uint64_t> ins, qry, del, kick, rdn, rup, moved_max;
         std::vector<double> bpk, lf, rms;
         for (const Result &x : all)
         {
@@ -593,6 +598,7 @@ namespace
             bpk.push_back(x.bits_per_key);
             lf.push_back(x.load_factor_pct);
             rms.push_back(x.rebuild_avg_ms);
+            moved_max.push_back(x.insert_moved_max);
         }
         out.ins_avg_ns = median_u64(ins);
         out.qry_avg_ns = median_u64(qry);
@@ -603,6 +609,7 @@ namespace
         out.bits_per_key = median_d(bpk);
         out.load_factor_pct = median_d(lf);
         out.rebuild_avg_ms = median_d(rms);
+        out.insert_moved_max = median_u64(moved_max);
         return out;
     }
 
@@ -675,7 +682,8 @@ namespace
                 << "）  → tab:exp-k-fixed-" << stag << "\n"
                 << "==================================================================="
                    "=============\n"
-                << "列: k | ins(μs) | qry(μs) | del(μs) | 总踢出 | 平均负载率\n\n";
+                << "列: k | ins(μs) | qry(μs) | del(μs) | 总踢出 | insert_moved_max "
+                   "| bits/key | 平均负载率\n\n";
             break;
         case otsh::ExperimentGroup::TierCubby:
             std::cout
@@ -740,11 +748,14 @@ namespace
                       << "  实测基线: ins=" << ns_to_us(r.ins_avg_ns)
                       << " qry=" << ns_to_us(r.qry_avg_ns)
                       << " del=" << ns_to_us(r.del_avg_ns) << " kick=" << kick
-                      << " load=" << std::setprecision(2) << r.load_factor_pct << "%\n";
+                      << " moved_max=" << r.insert_moved_max
+                      << " bpk=" << std::setprecision(2) << r.bits_per_key
+                      << " load=" << r.load_factor_pct << "%\n";
             std::cout << "CH4_TABLE,k," << stag << ',' << d.k_kick << ',' << std::fixed
                       << std::setprecision(2) << ns_to_us(r.ins_avg_ns) << ','
                       << ns_to_us(r.qry_avg_ns) << ',' << ns_to_us(r.del_avg_ns) << ','
-                      << kick << ',' << r.load_factor_pct << '\n';
+                      << kick << ',' << r.insert_moved_max << ',' << r.bits_per_key
+                      << ',' << r.load_factor_pct << '\n';
             break;
         }
         case otsh::ExperimentGroup::TierCubby:

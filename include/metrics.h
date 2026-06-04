@@ -24,10 +24,8 @@ namespace otsh
 
         struct EventSummary
         {
-            uint64_t rebuild_down = 0;  // 重建下采样次数
-            uint64_t rebuild_up = 0;    // 重建上采样次数
-            uint64_t resize_start = 0;  // 扩容开始次数
-            uint64_t resize_finish = 0; // 扩容完成次数
+            uint64_t rebuild_down = 0; // 重建下采样次数
+            uint64_t rebuild_up = 0;   // 重建上采样次数
         };
 
         struct Snapshot
@@ -87,12 +85,6 @@ namespace otsh
         void on_rebuild_down(uint64_t elapsed_ns = 0);
         void on_rebuild_up(uint64_t elapsed_ns = 0);
 
-        // 扩容开始
-        void on_resize_start();
-
-        // 扩容完成
-        void on_resize_finish();
-
         // 快照
         Snapshot snapshot() const;
 
@@ -141,8 +133,6 @@ namespace otsh
         // Events
         std::atomic<uint64_t> ev_rebuild_down_{0};
         std::atomic<uint64_t> ev_rebuild_up_{0};
-        std::atomic<uint64_t> ev_resize_start_{0};
-        std::atomic<uint64_t> ev_resize_finish_{0};
     };
 
     // 进程级 metrics（后续可改为注入依赖）。

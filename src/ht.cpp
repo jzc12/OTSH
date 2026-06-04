@@ -6,7 +6,6 @@
 #include "otsh/kkick.h"
 #include "otsh/meta_entry.h"
 #include "otsh/rebuild.h"
-#include "otsh/resize.h"
 #include "otsh/system_params.h"
 #include <algorithm>
 #include <chrono>
@@ -112,16 +111,14 @@ namespace otsh
             n_ = 0;
             global_metrics().on_init();
 
-            active_.reset();
-            old_.reset();
-            resize_.reset();
+            table_.reset();
 
-            active_.N = derived_.N;
-            active_.K = derived_.K;
+            table_.N = derived_.N;
+            table_.K = derived_.K;
             const uint64_t facilities_cnt =
-                std::max<uint64_t>(1, active_.N / active_.K);
-            active_.facilities.clear();
-            active_.facilities.resize(static_cast<size_t>(facilities_cnt));
+                std::max<uint64_t>(1, table_.N / table_.K);
+            table_.facilities.clear();
+            table_.facilities.resize(static_cast<size_t>(facilities_cnt));
 
             uint64_t s = now_seed() ^ p.seed1 ^ (p.seed2 << 1) ^ (p.seed3 << 2);
             pi_.k1 = splitmix64(s ^ 0x1111111111111111ULL);
@@ -129,16 +126,16 @@ namespace otsh
             pi_.k3 = splitmix64(s ^ 0x3333333333333333ULL);
             pi_.k4 = splitmix64(s ^ 0x4444444444444444ULL);
 
-            for (auto &f : active_.facilities)
+            for (auto &f : table_.facilities)
             {
                 f.tiers.clear();
                 f.max_tier = derived_.max_tier;
-                f.D.assign(static_cast<size_t>(active_.K), Router{});
+                f.D.assign(static_cast<size_t>(table_.K), Router{});
                 f.ma.configure(derived_.fanout, derived_.node_max_bits);
-                f.ma.reset(static_cast<size_t>(active_.K));
+                f.ma.reset(static_cast<size_t>(table_.K));
                 f.tail = nullptr;
                 f.tail_owned.reset();
-                ensure_tail(active_, f);
+                ensure_tail(table_, f);
             }
 
             return {true, ""};
@@ -148,10 +145,8 @@ namespace otsh
         {
             std::lock_guard<std::mutex> lk(mu_);
             auto r = insert_no_lock(key, true);
-            if (r.ok && r.inserted)
-                maybe_resize_locked();
             if (r.ok)
-                run_migrate_budget();
+                run_rebuild_budget();
             return r;
         }
 
@@ -159,22 +154,22 @@ namespace otsh
         {
             std::lock_guard<std::mutex> lk(mu_);
             QueryResult r;
-            if (active_.facilities.empty())
+            if (table_.facilities.empty())
             {
                 r.ok = false;
                 r.error = "not_initialized";
                 return r;
             }
             uint64_t gx = pi_.pi(key);
-            const Facility &f = facility_for_key(active_, gx);
+            const Facility &f = facility_for_key(table_, gx);
             r.ok = true;
-            const size_t fi = facility_index_of(active_, &f);
-            const size_t b = route_bucket_for(active_, gx);
+            const size_t fi = facility_index_of(table_, &f);
+            const size_t b = route_bucket_for(table_, gx);
             auto [loc, steps] = router_at(f, b).locate(key);
             uint64_t local_steps = 0;
             if (loc)
             {
-                r.found = query_cubby_via_local_router(*loc->first, gx, fi, active_,
+                r.found = query_cubby_via_local_router(*loc->first, gx, fi, table_,
                                                        local_steps, loc->second);
                 if (r.found)
                     r.cubby_tier = loc->first->tier;
@@ -182,22 +177,6 @@ namespace otsh
             r.router_probe_steps = steps + local_steps;
             global_metrics().on_query(r.router_probe_steps);
 
-            if (!r.found && old_)
-            {
-                const Facility &of = facility_for_key(*old_, gx);
-                const size_t ofi = facility_index_of(*old_, &of);
-                const size_t ob = route_bucket_for(*old_, gx);
-                auto [oloc, osteps] = router_at(of, ob).locate(key);
-                uint64_t olocal = 0;
-                if (oloc)
-                {
-                    r.found = query_cubby_via_local_router(*oloc->first, gx, ofi, *old_,
-                                                           olocal, oloc->second);
-                    if (r.found)
-                        r.cubby_tier = oloc->first->tier;
-                }
-                r.router_probe_steps = std::max(r.router_probe_steps, osteps + olocal);
-            }
             return r;
         }
 
@@ -205,15 +184,15 @@ namespace otsh
         {
             std::lock_guard<std::mutex> lk(mu_);
             DeleteResult r;
-            if (active_.facilities.empty())
+            if (table_.facilities.empty())
             {
                 r.ok = false;
                 r.error = "not_initialized";
                 return r;
             }
             uint64_t gx = pi_.pi(key);
-            Facility &f = facility_for_key(active_, gx);
-            const size_t b = route_bucket_for(active_, gx);
+            Facility &f = facility_for_key(table_, gx);
+            const size_t b = route_bucket_for(table_, gx);
             auto [loc, steps] = router_at(f, b).locate(key);
             r.router_probe_steps = steps;
             uint64_t moved_total = 0;
@@ -231,16 +210,16 @@ namespace otsh
                 c->size--;
                 router_at(f, b).erase(key);
                 sync_facility_bucket(f, b);
-                local_router_erase(*c, gx, active_.K);
+                local_router_erase(*c, gx, table_.K);
                 n_--;
 
                 if (c == f.tail)
                 {
-                    promote_tail_if_empty(active_, f);
+                    promote_tail_if_empty(table_, f);
                 }
                 else
                 {
-                    ensure_tail(active_, f);
+                    ensure_tail(table_, f);
                     if (f.tail && !f.tail->occupied.empty())
                     {
                         // §3.4：随机从 tail 取一元素回填
@@ -248,9 +227,9 @@ namespace otsh
                             splitmix64(key ^ pi_.k4 ^ 0x9e3779b97f4a7c15ULL) %
                             f.tail->occupied.size();
                         size_t take_slot = f.tail->occupied[pick];
-                        const size_t fr_tail = facility_index_of(active_, &f);
+                        const size_t fr_tail = facility_index_of(table_, &f);
                         const auto moved_opt =
-                            recover_key_from_slot(*f.tail, take_slot, fr_tail, active_);
+                            recover_key_from_slot(*f.tail, take_slot, fr_tail, table_);
                         if (moved_opt)
                         {
                             const uint64_t moved_key = *moved_opt;
@@ -277,14 +256,14 @@ namespace otsh
                                 }
                             }
                             const uint32_t ins = (0u) | ((pj & 0x0fffu) << 4);
-                            put_quotient_slot(*c, slot, moved_key, mgx, fr_tail, active_, ins);
+                            put_quotient_slot(*c, slot, moved_key, mgx, fr_tail, table_, ins);
                             c->occupied.push_back(slot);
                             c->size++;
                             c->free_slots.mark_used(static_cast<int>(slot));
                             c->array_m.mark_used(slot);
-                            local_router_put(*c, mgx, active_.K, moved_key, pj);
+                            local_router_put(*c, mgx, table_.K, moved_key, pj);
 
-                            const size_t mb = route_bucket_for(active_, mgx);
+                            const size_t mb = route_bucket_for(table_, mgx);
                             router_at(f, mb).erase(moved_key);
                             sync_facility_bucket(f, mb);
                             router_at(f, mb).insert(moved_key, std::make_pair(c, slot));
@@ -292,32 +271,9 @@ namespace otsh
                             moved_total += 1;
                         }
                     }
-                    promote_tail_if_empty(active_, f);
+                    promote_tail_if_empty(table_, f);
                 }
                 prune_empty_cubby_from_tiers(f, c);
-            }
-
-            if (old_)
-            {
-                Facility &of = facility_for_key(*old_, gx);
-                const size_t ob = route_bucket_for(*old_, gx);
-                auto [oloc, osteps] = router_at(of, ob).locate(key);
-                steps = std::max(steps, osteps);
-                if (oloc)
-                {
-                    deleted_any = true;
-                    Cubby *c = oloc->first;
-                    if (!loc)
-                        r.cubby_tier = c->tier;
-                    size_t slot = oloc->second;
-                    c->slots[slot].reset();
-                    c->array_b.update(slot, MiniArray::Bits{}, 0);
-                    remove_occupied(*c, slot);
-                    c->free_slots.mark_free(static_cast<int>(slot));
-                    c->size--;
-                    router_at(of, ob).erase(key);
-                    n_--;
-                }
             }
 
             r.ok = true;
@@ -327,8 +283,7 @@ namespace otsh
             global_metrics().on_delete(moved_total, /*router_steps=*/steps,
                                        /*meta_bits=*/meta_bits);
             maybe_schedule_rebuild(f);
-            maybe_resize_locked();
-            run_migrate_budget();
+            run_rebuild_budget();
             return r;
         }
 
@@ -347,9 +302,9 @@ namespace otsh
             std::lock_guard<std::mutex> lk(mu_);
             return HashTableState{
                 .n = n_,
-                .N = active_.N,
-                .K = active_.K,
-                .facilities = static_cast<uint64_t>(active_.facilities.size()),
+                .N = table_.N,
+                .K = table_.K,
+                .facilities = static_cast<uint64_t>(table_.facilities.size()),
                 .k_kick = derived_.k_kick,
                 .k_polylog_exp = derived_.k_polylog_exp,
                 .preset_id = derived_.preset_id};
@@ -367,7 +322,7 @@ namespace otsh
             drain_background_work_locked();
         }
 
-        static uint64_t facility_active_meta_bits(const Facility &f)
+        static uint64_t facility_table_meta_bits(const Facility &f)
         {
             uint64_t s = 0;
             for (size_t b = 0; b < f.D.size(); ++b)
@@ -375,8 +330,6 @@ namespace otsh
                 if (f.D[b].entry_count() == 0)
                     continue;
                 s += f.D[b].bits_total();
-                if (b < f.ma.size())
-                    s += f.ma.bitlen(b);
             }
             return s;
         }
@@ -385,9 +338,9 @@ namespace otsh
         {
             std::lock_guard<std::mutex> lk(mu_);
             uint64_t total = 0;
-            for (const Facility &f : active_.facilities)
+            for (const Facility &f : table_.facilities)
             {
-                total += facility_active_meta_bits(f);
+                total += facility_table_meta_bits(f);
                 auto add_cubby = [&](const Cubby *c)
                 {
                     if (!c)
@@ -413,11 +366,11 @@ namespace otsh
             const std::function<void(const CubbyStructureView &)> &fn) const
         {
             std::lock_guard<std::mutex> lk(mu_);
-            if (active_.facilities.empty())
+            if (table_.facilities.empty())
                 return;
-            for (size_t fi = 0; fi < active_.facilities.size(); ++fi)
+            for (size_t fi = 0; fi < table_.facilities.size(); ++fi)
             {
-                const Facility &f = active_.facilities[fi];
+                const Facility &f = table_.facilities[fi];
                 for (size_t j = 0; j < f.tiers.size(); ++j)
                 {
                     for (const auto &up : f.tiers[j])
@@ -437,7 +390,7 @@ namespace otsh
                         {
                             if (!c.slots[si].has_value())
                                 continue;
-                            v.slot_keys[si] = recover_key_from_slot(c, si, fi, active_);
+                            v.slot_keys[si] = recover_key_from_slot(c, si, fi, table_);
                         }
                         fn(v);
                     }
@@ -457,7 +410,7 @@ namespace otsh
                     {
                         if (!c.slots[si].has_value())
                             continue;
-                        v.slot_keys[si] = recover_key_from_slot(c, si, fi, active_);
+                        v.slot_keys[si] = recover_key_from_slot(c, si, fi, table_);
                     }
                     fn(v);
                 }
@@ -478,9 +431,7 @@ namespace otsh
             }
         };
 
-        TableState active_;
-        std::optional<TableState> old_;
-        ResizeManager resize_;
+        TableState table_;
 
         struct KickInsertResult
         {
@@ -501,13 +452,13 @@ namespace otsh
 
         uint64_t target_tier_count(int j) const
         {
-            return tier_target_count(j, derived_.n_hint, active_.K, derived_.tier_use_canon,
+            return tier_target_count(j, derived_.n_hint, table_.K, derived_.tier_use_canon,
                                      derived_.tier_target_divisor);
         }
 
         size_t tier_capacity(int tier) const
         {
-            return tier_cubby_capacity(active_.K, derived_.n_hint, tier,
+            return tier_cubby_capacity(table_.K, derived_.n_hint, tier,
                                        derived_.tier_use_canon);
         }
 
@@ -527,7 +478,7 @@ namespace otsh
             if (c.kick_geom)
                 return;
             c.kick_geom = std::make_unique<KKickGeometry>(
-                derived_.k_kick, c.capacity, active_.K, derived_.n_hint);
+                derived_.k_kick, c.capacity, table_.K, derived_.n_hint);
             c.array_m.reset(c.kick_geom.get(), c.capacity);
         }
 
@@ -628,7 +579,7 @@ namespace otsh
                 return;
             if (!params_.enable_rebuild_down && !params_.enable_rebuild_up)
                 return;
-            const size_t fi = facility_index_of(active_, &f);
+            const size_t fi = facility_index_of(table_, &f);
             // tier_level：论文 j-tiered（1..max_tier）；tiers[idx] 中 idx = tier_level - 1
             for (int tier_level = 1; tier_level < f.max_tier; ++tier_level)
             {
@@ -642,7 +593,7 @@ namespace otsh
                 {
                     scheduler_.enqueue([this, fi, tier_level]()
                                        {
-          if (fi >= active_.facilities.size())
+          if (fi >= table_.facilities.size())
             return;
           rebuild_down(fi, tier_level); });
                 }
@@ -654,7 +605,7 @@ namespace otsh
                     {
                         scheduler_.enqueue([this, fi, tier_level]()
                                            {
-            if (fi >= active_.facilities.size())
+            if (fi >= table_.facilities.size())
               return;
             rebuild_up(fi, tier_level); });
                     }
@@ -668,16 +619,14 @@ namespace otsh
         {
             for (int i = 0; i < 2'000'000 && !scheduler_.empty(); ++i)
                 scheduler_.step_budget(16);
-            for (int i = 0; i < 2'000'000 && old_; ++i)
-                run_migrate_budget();
         }
 
         void rebuild_down(size_t fi, int tier_level)
         {
             const auto t0 = std::chrono::steady_clock::now();
-            if (fi >= active_.facilities.size())
+            if (fi >= table_.facilities.size())
                 return;
-            Facility &f = active_.facilities[fi];
+            Facility &f = table_.facilities[fi];
             // 禁止合并出超过 max_tier 的 cubby（如 max_tier=3 时仅 1→2、2→3）
             if (tier_level < 1 || tier_level >= f.max_tier)
                 return;
@@ -728,12 +677,12 @@ namespace otsh
                     if (!c.slots[si].has_value())
                         continue;
                     ++slots_cleared;
-                    if (auto rk = recover_key_from_slot(c, si, fi, active_); rk)
+                    if (auto rk = recover_key_from_slot(c, si, fi, table_); rk)
                     {
                         const uint64_t gkx = pi_.pi(*rk);
-                        const size_t bk = route_bucket_for(active_, gkx);
+                        const size_t bk = route_bucket_for(table_, gkx);
                         router_at(f, bk).erase(*rk);
-                        local_router_erase(c, gkx, active_.K);
+                        local_router_erase(c, gkx, table_.K);
                         dirty_buckets.insert(bk);
                         keys.push_back(*rk);
                     }
@@ -753,7 +702,7 @@ namespace otsh
             if (n_ >= slots_cleared)
                 n_ -= slots_cleared;
 
-            auto merged = create_cubby(active_.K, derived_.n_hint, up_level);
+            auto merged = create_cubby(table_.K, derived_.n_hint, up_level);
             in_rebuild_ = true;
             size_t reinserted = 0;
             for (uint64_t k : keys)
@@ -780,9 +729,9 @@ namespace otsh
         void rebuild_up(size_t fi, int tier_level)
         {
             const auto t0 = std::chrono::steady_clock::now();
-            if (fi >= active_.facilities.size())
+            if (fi >= table_.facilities.size())
                 return;
-            Facility &f = active_.facilities[fi];
+            Facility &f = table_.facilities[fi];
             const int up_level = tier_level + 1;
             if (tier_level < 1 || up_level > f.max_tier)
                 return;
@@ -810,12 +759,12 @@ namespace otsh
                 if (!big->slots[si].has_value())
                     continue;
                 ++slots_cleared;
-                if (auto rk = recover_key_from_slot(*big, si, fi, active_); rk)
+                if (auto rk = recover_key_from_slot(*big, si, fi, table_); rk)
                 {
                     const uint64_t gkx = pi_.pi(*rk);
-                    const size_t bk = route_bucket_for(active_, gkx);
+                    const size_t bk = route_bucket_for(table_, gkx);
                     router_at(f, bk).erase(*rk);
-                    local_router_erase(*big, gkx, active_.K);
+                    local_router_erase(*big, gkx, table_.K);
                     dirty_buckets.insert(bk);
                     keys.push_back(*rk);
                 }
@@ -841,7 +790,7 @@ namespace otsh
             std::vector<std::unique_ptr<Cubby>> pieces;
             pieces.reserve(static_cast<size_t>(tj));
             for (uint64_t i = 0; i < tj; ++i)
-                pieces.push_back(create_cubby(active_.K, derived_.n_hint, tier_level));
+                pieces.push_back(create_cubby(table_.K, derived_.n_hint, tier_level));
 
             in_rebuild_ = true;
             size_t reinserted = 0;
@@ -865,148 +814,6 @@ namespace otsh
                 std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count());
             // 论文口径：向下拆分（j+1→j tier）计 rebuild_down
             global_metrics().on_rebuild_down(elapsed);
-        }
-
-        void maybe_resize_locked()
-        {
-            if (!params_.enable_resize || in_rebuild_ || active_.facilities.empty() ||
-                active_.N < 2)
-                return;
-            const double lf = (params_.load_factor > 0.0 && params_.load_factor < 1.0)
-                                  ? params_.load_factor
-                                  : 0.90;
-            if (!old_ && static_cast<double>(n_) > static_cast<double>(active_.N) * lf)
-            {
-                start_migration(active_.N * 2);
-            }
-            else if (!old_ && n_ > 0 && n_ < active_.N / 4)
-            {
-                start_migration(std::max<uint64_t>(2, active_.N / 2));
-            }
-        }
-
-        void start_migration(uint64_t newN)
-        {
-            scheduler_.clear();
-            global_metrics().on_resize_start();
-            old_ = std::move(active_);
-            active_.reset();
-            resize_.start(old_->facilities.size());
-
-            derived_ = derive_params(params_);
-            derived_.N = next_pow2(newN);
-            derived_.K = choose_K(derived_.N, derived_.k_polylog_exp);
-            params_ = apply_derived(params_, derived_);
-            active_.N = derived_.N;
-            active_.K = derived_.K;
-            const uint64_t facilities_cnt =
-                std::max<uint64_t>(1, active_.N / active_.K);
-            active_.facilities.resize(static_cast<size_t>(facilities_cnt));
-            for (auto &f : active_.facilities)
-            {
-                f.tiers.clear();
-                f.max_tier = derived_.max_tier;
-                f.D.assign(static_cast<size_t>(active_.K), Router{});
-                f.ma.configure(derived_.fanout, derived_.node_max_bits);
-                f.ma.reset(static_cast<size_t>(active_.K));
-                f.tail = nullptr;
-                f.tail_owned.reset();
-                ensure_tail(active_, f);
-            }
-        }
-
-        void run_migrate_budget()
-        {
-            run_rebuild_budget();
-            if (!old_)
-                return;
-            if (!resize_.in_progress())
-            {
-                old_.reset();
-                global_metrics().on_resize_finish();
-                return;
-            }
-
-            resize_.step_budget_checked(1, [&](size_t oidx) -> bool
-                                        {
-      if (!old_ || oidx >= old_->facilities.size())
-        return false;
-      // 搬迁一个 facility
-      Facility &of = old_->facilities[oidx];
-      // 收集 keys（不依赖 old 的 router，以防一致性问题）
-      std::vector<uint64_t> keys;
-      if (of.tail_owned) {
-        for (size_t si = 0; si < of.tail_owned->slots.size(); ++si) {
-          if (!of.tail_owned->slots[si].has_value())
-            continue;
-          if (auto rk = recover_key_from_slot(*of.tail_owned, si, oidx, *old_);
-              rk)
-            keys.push_back(*rk);
-        }
-      }
-      for (auto &tier : of.tiers) {
-        for (auto &cp : tier) {
-          for (size_t si = 0; si < cp->slots.size(); ++si) {
-            if (!cp->slots[si].has_value())
-              continue;
-            if (auto rk = recover_key_from_slot(*cp, si, oidx, *old_); rk)
-              keys.push_back(*rk);
-          }
-        }
-      }
-      for (uint64_t k : keys) {
-        // 迁移期间：如果 key 已在 active（可能被新插入覆盖），跳过
-        uint64_t gx = pi_.pi(k);
-        Facility &nf = facility_for_key(active_, gx);
-        const size_t nb = route_bucket_for(active_, gx);
-        if (router_at(nf, nb).locate(k).first.has_value())
-          continue;
-        ensure_tail(active_, nf);
-        auto kr = kkick_insert(nf, nf.tail, k, facility_index_of(active_, &nf));
-        if (!kr.ok) {
-          ensure_tail(active_, nf);
-          kr = kkick_insert(nf, nf.tail, k, facility_index_of(active_, &nf));
-        }
-        if (!kr.ok)
-          return false;
-      }
-
-      // 清空旧 facility，标记完成（保留 D 桶数，避免迁移窗口内 query 仍路由到已处理
-      // facility 时 vector 为空导致越界）
-      for (auto &rt : of.D)
-        rt.clear();
-      of.tiers.clear();
-      of.tail_owned.reset();
-      of.tail = nullptr;
-      return true; });
-
-            if (!resize_.in_progress())
-            {
-                old_.reset();
-                global_metrics().on_resize_finish();
-            }
-        }
-
-        static uint64_t next_pow2(uint64_t x)
-        {
-            if (x <= 1)
-                return 1;
-            x--;
-            x |= x >> 1;
-            x |= x >> 2;
-            x |= x >> 4;
-            x |= x >> 8;
-            x |= x >> 16;
-            x |= x >> 32;
-            return x + 1;
-        }
-
-        static uint64_t choose_K(uint64_t N, int polylog_exp)
-        {
-            TableParams tp;
-            tp.n = N;
-            tp.k_polylog_exp = polylog_exp;
-            return derive_params(tp).K;
         }
 
         static size_t preferred_router_bucket(uint64_t gx, uint64_t K, size_t cap)
@@ -1238,13 +1045,13 @@ namespace otsh
 
             auto router_erase_key = [&](uint64_t ky)
             {
-                const size_t bk = route_bucket_for(active_, pi_.pi(ky));
+                const size_t bk = route_bucket_for(table_, pi_.pi(ky));
                 router_at(f, bk).erase(ky);
                 sync_facility_bucket(f, bk);
             };
             auto router_put_key = [&](uint64_t ky, Cubby *cb, size_t slot)
             {
-                const size_t bk = route_bucket_for(active_, pi_.pi(ky));
+                const size_t bk = route_bucket_for(table_, pi_.pi(ky));
                 router_at(f, bk).insert(ky, std::make_pair(cb, slot));
                 sync_facility_bucket(f, bk);
             };
@@ -1260,9 +1067,9 @@ namespace otsh
                 }
                 v.occupied = true;
                 if (kout)
-                    *kout = recover_key_from_slot(*c, slot, facility_r, active_);
+                    *kout = recover_key_from_slot(*c, slot, facility_r, table_);
                 MetaEntry me;
-                if (decode_slot_meta(*c, slot, active_, me))
+                if (decode_slot_meta(*c, slot, table_, me))
                     v.insert_depth = me.insert_bits & 0x0fu;
                 return v;
             };
@@ -1275,10 +1082,10 @@ namespace otsh
                 const bool was = c->slots[slot].has_value();
                 if (was)
                 {
-                    if (auto oldk = recover_key_from_slot(*c, slot, facility_r, active_))
+                    if (auto oldk = recover_key_from_slot(*c, slot, facility_r, table_))
                     {
                         router_erase_key(*oldk);
-                        local_router_erase(*c, pi_.pi(*oldk), active_.K);
+                        local_router_erase(*c, pi_.pi(*oldk), table_.K);
                     }
                 }
                 else
@@ -1291,9 +1098,9 @@ namespace otsh
                 const uint64_t gxc = pi_.pi(ky);
                 const uint32_t ins =
                     (depth & 0x0fu) | ((probe_j & 0x0fffu) << 4);
-                put_quotient_slot(*c, slot, ky, gxc, facility_r, active_, ins);
+                put_quotient_slot(*c, slot, ky, gxc, facility_r, table_, ins);
                 router_put_key(ky, c, slot);
-                local_router_put(*c, gxc, active_.K, ky, probe_j);
+                local_router_put(*c, gxc, table_.K, ky, probe_j);
                 return true;
             };
 
@@ -1301,10 +1108,10 @@ namespace otsh
             {
                 if (slot >= c->slots.size() || !c->slots[slot].has_value())
                     return;
-                if (auto oldk = recover_key_from_slot(*c, slot, facility_r, active_))
+                if (auto oldk = recover_key_from_slot(*c, slot, facility_r, table_))
                 {
                     router_erase_key(*oldk);
-                    local_router_erase(*c, pi_.pi(*oldk), active_.K);
+                    local_router_erase(*c, pi_.pi(*oldk), table_.K);
                 }
                 c->slots[slot].reset();
                 c->array_b.erase(slot);
@@ -1334,15 +1141,15 @@ namespace otsh
         InsertResult insert_no_lock(uint64_t key, bool /*persist_semantics*/)
         {
             InsertResult r;
-            if (active_.facilities.empty())
+            if (table_.facilities.empty())
             {
                 r.ok = false;
                 r.error = "not_initialized";
                 return r;
             }
             uint64_t gx = pi_.pi(key);
-            Facility &f = facility_for_key(active_, gx);
-            const size_t b = route_bucket_for(active_, gx);
+            Facility &f = facility_for_key(table_, gx);
+            const size_t b = route_bucket_for(table_, gx);
             if (auto loc = router_at(f, b).locate(key); loc.first.has_value())
             {
                 r.ok = true;
@@ -1355,28 +1162,11 @@ namespace otsh
                                            /*meta_bits=*/meta_bits);
                 return r;
             }
-            if (old_)
-            {
-                Facility &of = facility_for_key(*old_, gx);
-                const size_t ob = route_bucket_for(*old_, gx);
-                if (auto oloc = router_at(of, ob).locate(key); oloc.first.has_value())
-                {
-                    r.ok = true;
-                    r.inserted = false;
-                    r.router_probe_steps = oloc.second;
-                    r.kick_count = 0;
-                    r.cubby_tier = -1;
-                    const uint64_t meta_bits = op_meta_bits_estimate(f, b);
-                    global_metrics().on_insert(/*moved=*/0, /*router_steps=*/oloc.second,
-                                               /*meta_bits=*/meta_bits);
-                    return r;
-                }
-            }
-            ensure_tail(active_, f);
+            ensure_tail(table_, f);
 
             // Step D: k-kick insertion into tail cubby
             auto kr = kkick_insert(f, f.tail, key,
-                                   facility_index_of(active_, &f));
+                                   facility_index_of(table_, &f));
             if (!kr.ok)
             {
                 r.ok = false;

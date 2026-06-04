@@ -19,7 +19,6 @@ namespace otsh
         int tier_target_divisor = 1; // tier_use_canon=false 时对公式 t_j 的除数
         // §6 验证模式：暂停未完成子系统，只测 CRUD / k-kick / rebuild 指标
         bool validation_mode = false;
-        bool enable_resize = true;       // false=不做双表迁移
         bool enable_rebuild_up = true;   // false=仅测 rebuild_down（合并）
         bool enable_rebuild_down = true; // false=跳过 cubby 合并
         double load_factor = 0.90;

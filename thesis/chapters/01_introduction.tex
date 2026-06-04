@@ -1,0 +1,26 @@
+\chapter{引言}
+
+\section{实验背景及意义}
+
+哈希表是一种通过哈希函数把关键字映射到数组相应位置的结构\cite{knuth1973sorting,bender2024sosa}，它在数据库索引、键值存储、编译器符号表以及运行时系统等常见基础架构中具有广泛的应用场景。面向键值存储的哈希索引优化也是国内研究热点之一，相关工作从键摘要压缩与热点感知调度等角度改进空间利用与探查效率\cite{wang2024hotaware}。相较于链地址法，开放寻址哈希表将元素直接放置在连续数组中，其查询路径相对较短，缓存局部性表现更优；但当负载因子上升时，冲突及探测长度会快速增加操作成本。工程上常采用预留空槽以降低冲突概率，但也会牺牲空间利用率。因此，哈希表设计需要做到：在查询、插入及删除时间可控的前提下，减少每个元素定位、更新与键恢复所需的额外存储。
+
+Bender 等人的论文\cite{bender2022otsh} 从理论层面阐述了上述问题：在保证查询时间复杂度为 \(O(1)\) 的同时，若插入和删除允许承担 \(O(k)\) 次元素交换代价（一次更新过程中被搬移的元素个数），则每个元素所占的额外空间可从 \(O(\log\log n)\) 比特降至 \(O(\log^{(k)}n)\) 比特（本文空间开销均按比特计；\(\log^{(k)}n\) 表示对 \(n\) 连续取 \(k\) 次对数）。该结果表明，开放寻址哈希表的空间利用率不仅取决于空位占比，还与元素搬移以及恢复原始键信息的编码方式密切相关。此前，紧凑哈希表在常数时间操作下每键约需 \(O(\log\log n)\) 比特冗余；动态检索与 filter 的下界\cite{kuszmaul2024filters}、Iceberg 系列结果\cite{bender2024iceberg,pandey2023iceberght} 以及紧凑检索结构\cite{pagh2008retrieval} 等已逐步逼近该信息论下界。本文在该理论框架下给出 Facility--Cubby--Slot 分层结构的简化实现，具体架构与模块分工见下一节，各模块的算法细节留待第二、三章展开。
+
+\section{国内外现状}
+
+哈希表实现主要包括链地址法与开放寻址法两大类\cite{knuth1973sorting,bender2024sosa}。链地址法借助链表或桶结构处理冲突，实现直接，但指针与动态分配会带来额外空间和缓存开销。开放寻址法将元素置于数组槽位，局部性较好，却易受负载因子、探针序列与删除策略影响。布谷鸟哈希\cite{pagh2004cuckoo,lehmann2023sichash}以多候选位置与踢出过程缩短查询路径；最小完美哈希\cite{lehmann2026mphsurvey,lehmann2024shockhash,hermann2024phobic}面向静态集合提供更强查找保证，其动态扩展与紧凑编码也有持续研究\cite{kuszmaul2024filters,lehmann2025combined}；打包与压缩哈希表\cite{kurpicz2023pachash}、IcebergHT\cite{pandey2023iceberght,bender2024iceberg} 等工程方案则侧重实际吞吐与空间折中。国内方面，GPU 环境下的动态哈希表索引\cite{xiong2022starfish}等工作从紧凑型数据结构与分页显存管理提升大规模并发访问的可扩展性。这些路线分别改进了查询确定性、构造效率或空间利用率，但在同时支持动态插入删除与降低每键空间冗余之间仍难以兼顾。
+
+近年来，研究进一步聚焦到位级空间开销：仅靠负载因子无法刻画紧凑哈希表的真实成本，因为系统还须保存支持查询、更新与键恢复的辅助结构。Bender 等人的最优时间/空间权衡框架\cite{bender2022otsh} 将元素放置建模为带删除的球槽分配\cite{aamand2021dynamic,bansal2022deletions}，并以 k-kick 、局部查询路由器（Local Query Router）、MiniArray 与商压缩组合出可调的权衡曲线。本文工作定位于该框架的简化工程实现与实验观察：在 Facility--Cubby--Slot 分层组织下，分别实现 MiniArray 变长元数据维护、k-kick 有界交换插入与 Local Query Router 常数时间查询，并以操作延迟、踢出次数等指标对照理论权衡曲线\cite{bender2022otsh,kuszmaul2024filters}。
+
+\section{本文组织结构}
+
+本文以 Bender 等人的论文\cite{bender2022otsh} 的关键构造为核心，给出可运行的简化原型并完成实验评估。实现沿用 Facility--Cubby--Slot 结构，实现 MiniArray 维护变长元数据、Cubby 内 k-kick 完成有界交换插入、Local Query Router 将查询降为 \(O(1)\)、槽位存放商压缩载荷、Cubby 内部的 MiniArray \(B\) 保存键恢复差分与扩缩容采用 active/old 双表渐进式迁移等。
+
+本文针对三个相互联系的问题依次展开论述：
+\begin{enumerate}
+  \item 论文各模块的理论模型如何落地，并合并成一个完整的系统。
+  \item 在 MiniArray、k-kick 与 Local Query Router 完整实现的前提下，插入、查询与删除各阶段的延迟与吞吐处于何种量级。
+  \item 在不同的 \(n\)、\(K\)、\(k\) 分组实验下，k-kick 踢出次数、Cubby 拆分与合并次数等指标变化趋势如何，是否满足 \(O(k)\) 交换上界以及预期扩缩容行为。
+\end{enumerate}
+
+后续章节安排如下：第\ref{ch:theo_base}章介绍理论基础，第\ref{ch:system}章阐述哈希表结构与算法设计，第\ref{ch:exp}章报告系统性能实验结果，第\ref{ch:concl}章总结工作并讨论改进方向。

@@ -255,7 +255,25 @@ namespace otsh
 
     void Router::recompute_encoded_bits()
     {
+        uint64_t max_slot = 0;
+        for (const auto &e : entries_)
+            max_slot = std::max(max_slot, static_cast<uint64_t>(e.v.second));
+        uint32_t slot_bits = 1;
+        while ((uint64_t{1} << slot_bits) <= max_slot && slot_bits < 63)
+            ++slot_bits;
+
         BitWriter bw;
+        auto write_leaf_payload = [&](const Entry &e)
+        {
+            // Logical accounting only: the runtime Router stores the full key so the
+            // engineering prototype can do exact key equality, but the compact
+            // structure verifies candidates through cubby metadata. Charging 64
+            // duplicated key bits per leaf makes V1 bpk incomparable with the
+            // quotient+meta layout. Count a compact verifier plus slot locator.
+            bw.write_bits_u64(e.bits, 16); // stable verifier/fingerprint
+            bw.write_bits_u64(static_cast<uint64_t>(e.v.second), slot_bits);
+        };
+
         std::function<void(int)> enc = [&](int n)
         {
             if (n < 0)
@@ -287,14 +305,12 @@ namespace otsh
                 bw.write_bits_u64(cnt, 8);
                 for (size_t i = 0; i < cnt; i++)
                 {
-                    const uint64_t k = entries_[static_cast<size_t>(bucket[i])].key;
-                    bw.write_bits_u64(k, 64);
+                    write_leaf_payload(entries_[static_cast<size_t>(bucket[i])]);
                 }
             }
             else
             {
-                const uint64_t k = entries_[static_cast<size_t>(nd.entry_idx)].key;
-                bw.write_bits_u64(k, 64);
+                write_leaf_payload(entries_[static_cast<size_t>(nd.entry_idx)]);
             }
         };
         enc(root_);

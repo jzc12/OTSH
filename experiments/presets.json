@@ -86,6 +86,8 @@
                 "qry_us",
                 "del_us",
                 "kick",
+                "insert_moved_max",
+                "bits_per_key",
                 "load_factor_pct"
             ]
         },

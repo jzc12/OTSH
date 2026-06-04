@@ -7,7 +7,7 @@
 #include "otsh/kkick.h"
 #include "otsh/mini_array.h"
 #include "otsh/prefix_router.h"
-#include "otsh/resize.h"
+#include "otsh/router.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -354,20 +354,18 @@ int main()
     }
 
     {
-        ResizeManager rm;
-        std::vector<size_t> migrated;
-        rm.start(3);
-        rm.step_budget(2, [&](size_t idx)
-                       { migrated.push_back(idx); });
-        run_case("resize_manager_budget_progress",
-                 rm.in_progress() && rm.progress() == 2 && migrated.size() == 2 &&
-                     migrated[0] == 0 && migrated[1] == 1,
-                 cases);
-        rm.step_budget(2, [&](size_t idx)
-                       { migrated.push_back(idx); });
-        run_case("resize_manager_finishes",
-                 !rm.in_progress() && rm.progress() == 3 && migrated.size() == 3 &&
-                     migrated[2] == 2,
+        Router facility_router;
+        Cubby *dummy = nullptr;
+        for (uint64_t i = 0; i < 64; ++i)
+        {
+            facility_router.insert(0x100000000ULL + i,
+                                   std::make_pair(dummy, static_cast<size_t>(i)));
+        }
+        // Logical router accounting should describe compact routing metadata, not
+        // charge a duplicate 64-bit copy of every original key.
+        run_case("facility_router_logical_bits_not_full_key_copy",
+                 facility_router.bits_total() <
+                     64ULL * facility_router.entry_count(),
                  cases);
     }
 
@@ -393,14 +391,13 @@ int main()
     {
         HashTable ht;
         TableParams p = preset_by_name("n_1e3");
-        p.enable_resize = true;
         p.enable_rebuild_down = false;
         p.enable_rebuild_up = false;
-        p.load_factor = 0.55;
-        if (run_case("resize_workload_init", ht.init(p).ok, cases))
+        if (run_case("single_table_workload_init", ht.init(p).ok, cases))
         {
+            const uint64_t initial_N = ht.state().N;
             std::vector<uint64_t> keys;
-            for (uint64_t i = 1; i <= 700; ++i)
+            for (uint64_t i = 1; i <= 64; ++i)
             {
                 const auto r = ht.insert(i * 17);
                 if (!r.ok)
@@ -408,10 +405,11 @@ int main()
                 keys.push_back(i * 17);
             }
             ht.drain_background_work();
-            bool all_found = keys.size() == 700;
+            const auto final_state = ht.state();
+            bool all_found = keys.size() == 64 && final_state.N == initial_N;
             for (uint64_t k : keys)
                 all_found = all_found && ht.query(k).found;
-            run_case("resize_migration_queries_survive", all_found, cases);
+            run_case("single_table_queries_survive_without_resize", all_found, cases);
         }
     }
 

@@ -1,0 +1,25 @@
+=== otsh_ch5_variants ===
+=== run variant=V1 scale=1e4 workload=core ===
+=== otsh_ch5_variants ===
+variants=1 scales=1 workloads=1 runs=1 quick=0
+[CH5] variant=V1 scale=1e4 workload=core seed=1 quick=0
+  ok=1 correctness=1 elapsed=6076.185ms ins=10000 qry=10000 del=2000 n=8000
+  insert_avg=279.965us query_avg=2.196us delete_avg=959.352us bits_per_key=64.578 correctness=100.000%
+CH5_RESULT variant=V1 scale=1e4 workload=core insert_avg_us=279.965 query_avg_us=2.196 delete_avg_us=959.352 bits_per_key=64.578 correctness_pct=100.000
+Done
+=== run variant=V2 scale=1e4 workload=core ===
+=== otsh_ch5_variants ===
+variants=1 scales=1 workloads=1 runs=1 quick=0
+[CH5] variant=V2 scale=1e4 workload=core seed=1 quick=0
+  ok=1 correctness=1 elapsed=380.745ms ins=10000 qry=10000 del=2000 n=8000
+  insert_avg=23.558us query_avg=4.047us delete_avg=23.737us bits_per_key=196.608 correctness=100.000%
+CH5_RESULT variant=V2 scale=1e4 workload=core insert_avg_us=23.558 query_avg_us=4.047 delete_avg_us=23.737 bits_per_key=196.608 correctness_pct=100.000
+Done
+=== run variant=V3 scale=1e4 workload=core ===
+=== otsh_ch5_variants ===
+variants=1 scales=1 workloads=1 runs=1 quick=0
+[CH5] variant=V3 scale=1e4 workload=core seed=1 quick=0
+  ok=1 correctness=1 elapsed=933.649ms ins=10000 qry=10000 del=2000 n=8000
+  insert_avg=78.125us query_avg=2.601us delete_avg=23.060us bits_per_key=188.416 correctness=100.000%
+CH5_RESULT variant=V3 scale=1e4 workload=core insert_avg_us=78.125 query_avg_us=2.601 delete_avg_us=23.060 bits_per_key=188.416 correctness_pct=100.000
+Done

@@ -11,12 +11,12 @@
 % info 类用于录入个人信息
 %   带*号的为对应英文字段
 \njusetup[info]{
-    title = {面向实践的紧凑哈希表设计与简化复现},
+    title = {基于 k-kick 哈希结构的冷热分层存储设计与数据库集成实验},
     % 中文题目
     % 直接填写标题就是自动换行
     % 可以使用换行控制符(\\)手动指定换行位置
     %
-    title* = {Practical Compact Hash Table Design and Simplified Reproduction},
+    title* = {Design of Hot-Cold Tiered Storage Based on k-kick Hashing and Database Integration Experiments},
     % 英文题目
     %
     author = {纪泽操},
@@ -26,11 +26,11 @@
     % 作者英文姓名
     % 一般使用拼音
     %
-    keywords = {哈希表;时间空间权衡;探测复杂度;增强开放寻址;k-kick 树;动态扩容},
+    keywords = {k-kick 树;tail cubby;冷热分层存储;数据库集成},
     % 中文关键词列表
     % 使用英文半角逗号(,)分隔
     %
-    keywords* = {hash tables, time--space tradeoff, probe complexity, enhanced open addressing, k-kick tree, dynamic expansion},
+    keywords* = {k-kick tree, tail cubby, hot-cold tiered storage, database integration},
     % 英文关键词
     % 使用英文半角逗号(,)分隔
     %

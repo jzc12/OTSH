@@ -648,22 +648,22 @@ namespace
         case otsh::ExperimentGroup::NMicro:
             std::cout << "\n==========================================================="
                          "=====================\n"
-                      << "表 0  渐进验证（n=200→5000, K=log^3 n, k=4, 键均匀分布）  → "
-                         "tab:exp-n-micro\n"
+                      << "表 0  渐进验证（n=200→5000, N=2^⌈log₂n⌉, K=不超过(log₂N)^3"
+                         "的 2 的幂, k=4）  → tab:exp-n-micro\n"
                       << "============================================================="
                          "===================\n"
-                      << "列: n | ins(μs) | qry(μs) | del(μs) | 总踢出 | rebuild_down "
-                         "| rebuild_up | bits/key\n\n";
+                      << "列: n | N | K | ins(μs) | qry(μs) | del(μs) | 总踢出 | "
+                         "rebuild_down | rebuild_up | bits/key\n\n";
             break;
         case otsh::ExperimentGroup::NScale:
             std::cout << "\n==========================================================="
                          "=====================\n"
-                      << "表 1  规模 n 实验（n=10^3…10^5, K=log^3 n, k=4）  → "
+                      << "表 1  规模 n 实验（n=10^3…10^5, K∈{64,128,256}, k=3）  → "
                          "tab:exp-n-fixed\n"
                       << "============================================================="
                          "===================\n"
-                      << "列: n | ins(μs) | qry(μs) | del(μs) | 总踢出 | rebuild_down "
-                         "| rebuild_up | bits/key\n\n";
+                      << "列: n | N | K | ins(μs) | qry(μs) | del(μs) | 总踢出 | "
+                         "rebuild_down | rebuild_up | bits/key\n\n";
             break;
         case otsh::ExperimentGroup::KFixed:
             std::cout << "\n==========================================================="
@@ -712,18 +712,21 @@ namespace
         {
             const std::string nlab = format_n_label(d.n_hint);
             const uint64_t fac = facility_count(d);
-            std::cout << "n=" << nlab << '\n'
+            std::cout << "n=" << nlab << " (N=" << d.N << ", K=" << d.K
+                      << ", k=" << d.k_kick << ")\n"
                       << "  实测基线: ins=" << ns_to_us(r.ins_avg_ns)
                       << " qry=" << ns_to_us(r.qry_avg_ns)
                       << " del=" << ns_to_us(r.del_avg_ns) << " kick=" << r.kick_total
                       << " rebuild=" << r.rebuild_down << '/' << r.rebuild_up
                       << " bpk=" << std::setprecision(2) << r.bits_per_key
                       << " facilities=" << fac << '\n';
-            std::cout << "CH4_TABLE,n," << d.n_hint << ',' << std::fixed
-                      << std::setprecision(2) << ns_to_us(r.ins_avg_ns) << ','
-                      << ns_to_us(r.qry_avg_ns) << ',' << ns_to_us(r.del_avg_ns) << ','
-                      << r.kick_total << ',' << r.rebuild_down << ',' << r.rebuild_up
-                      << ',' << r.bits_per_key << '\n';
+            std::cout << "CH4_TABLE,n," << d.n_hint << ',' << d.N << ',' << d.K << ','
+                      << d.k_kick << ','
+                      << std::fixed << std::setprecision(2) << ns_to_us(r.ins_avg_ns)
+                      << ',' << ns_to_us(r.qry_avg_ns) << ','
+                      << ns_to_us(r.del_avg_ns) << ',' << r.kick_total << ','
+                      << r.rebuild_down << ',' << r.rebuild_up << ',' << r.bits_per_key
+                      << '\n';
             break;
         }
         case otsh::ExperimentGroup::KFixed:

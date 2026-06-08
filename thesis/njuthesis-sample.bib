@@ -11,14 +11,18 @@
   langid     = {english}
 }
 
-@book{knuth1973sorting,
-  title     = {The Art of Computer Programming, Volume 3: Sorting and Searching},
-  author    = {Knuth, Donald E.},
-  publisher = {Addison-Wesley},
-  location  = {Reading, MA},
-  date      = {1973},
-  langid    = {english}
+@article{oneil1996lsm,
+  title        = {The Log-Structured Merge-Tree ({LSM}-Tree)},
+  author       = {O'Neil, Patrick and Cheng, Edward and Gawlick, Dieter and O'Neil, Elizabeth},
+  journaltitle = {Acta Informatica},
+  volume       = {33},
+  number       = {4},
+  pages        = {351--385},
+  date         = {1996},
+  doi          = {10.1007/s002360050048},
+  langid       = {english}
 }
+
 
 @article{pagh2004cuckoo,
   title        = {Cuckoo Hashing},
@@ -234,25 +238,15 @@
   langid       = {english}
 }
 
-@incollection{mitzenmacher2001,
-  title     = {The Power of Two Random Choices: A Survey of Techniques and Results},
-  author    = {Mitzenmacher, Michael and Richa, Andr{\'e}a and Sitaraman, Ramesh},
-  booktitle = {Handbook of Randomized Computing},
-  publisher = {Springer},
-  pages     = {255--312},
-  date      = {2001},
-  langid    = {english}
-}
-
 @article{morrison1968,
-  title        = {{PATRICIA}---Practical Algorithm To Retrieve Information Coded in Alphanumeric},
+  title        = {PATRICIA---Practical Algorithm To Retrieve Information Coded in Alphanumeric},
   author       = {Morrison, Donald R.},
-  journaltitle = {Journal of the {ACM}},
+  journaltitle = {Journal of the ACM},
   volume       = {15},
   number       = {4},
   pages        = {514--534},
   date         = {1968},
-  doi          = {10.1145/321066.321078},
+  doi          = {10.1145/321479.321481},
   langid       = {english}
 }
 
@@ -266,16 +260,6 @@
   date         = {1988},
   doi          = {10.1137/0217022},
   langid       = {english}
-}
-
-@inproceedings{pagh2001,
-  title     = {Hashing with Limited Independence},
-  author    = {Pagh, Rasmus},
-  booktitle = {Proceedings of the 12th Annual {ACM}-{SIAM} Symposium on Discrete Algorithms ({SODA} 2001)},
-  pages     = {830--839},
-  publisher = {{SIAM}},
-  date      = {2001},
-  langid    = {english}
 }
 
 @inproceedings{conway2018,
@@ -337,4 +321,133 @@
   date         = {2022},
   doi          = {10.15888/j.cnki.csa.008664},
   langid       = {chinese}
+}
+
+@article{dong2021rocksdb,
+  title        = {{RocksDB}: Evolution of Development Priorities in a Key-value Store Serving Large-scale Applications},
+  author       = {Dong, Siying and Kryczka, Andrew and Jin, Yanqin and Stumm, Michael},
+  journaltitle = {{ACM} Transactions on Storage},
+  volume       = {17},
+  number       = {4},
+  pages        = {26:1--26:32},
+  date         = {2021},
+  doi          = {10.1145/3483840},
+  langid       = {english}
+}
+
+@article{chang2006bigtable,
+  title        = {Bigtable: A Distributed Storage System for Structured Data},
+  author       = {Chang, Fay and Dean, Jeff and Ghemawat, Sanjay and Hsieh, Wilson C. and Wallach, Deborah A. and Burrows, Mike and Chandra, Tushar and Fikes, Andrew and Gruber, Robert E.},
+  journaltitle = {{ACM} Transactions on Computer Systems},
+  volume       = {26},
+  number       = {2},
+  pages        = {4:1--4:26},
+  date         = {2008},
+  doi          = {10.1145/1365815.1365816},
+  langid       = {english}
+}
+
+@article{bloom1970,
+  title        = {Space/Time Trade-offs in Hash Coding with Allowable Errors},
+  author       = {Bloom, Burton H.},
+  journaltitle = {Communications of the {ACM}},
+  volume       = {13},
+  number       = {7},
+  pages        = {422--426},
+  date         = {1970},
+  doi          = {10.1145/362686.362692},
+  langid       = {english}
+}
+
+@article{dietzfelbinger1994,
+  title        = {Dynamic Perfect Hashing: Upper and Lower Bounds},
+  author       = {Dietzfelbinger, Martin and Karlin, Anna and Mehlhorn, Kurt and Meyer auf der Heide, Friedhelm and Rohnert, Hans and Tarjan, Robert E.},
+  journaltitle = {{SIAM} Journal on Computing},
+  volume       = {23},
+  number       = {4},
+  pages        = {738--761},
+  date         = {1994},
+  doi          = {10.1137/S0097539791194094},
+  langid       = {english}
+}
+
+@inproceedings{cooper2010ycsb,
+  title     = {Benchmarking Cloud Serving Systems with {YCSB}},
+  author    = {Cooper, Brian F. and Silberstein, Adam and Tam, Erwin and Patil, Raghu and Ramakrishnan, R. and Sears, Russell},
+  booktitle = {Proceedings of the 1st {ACM} Symposium on Cloud Computing ({SoCC} 2010)},
+  pages     = {143--154},
+  publisher = {{ACM}},
+  date      = {2010},
+  doi       = {10.1145/1807128.1807152},
+  langid    = {english}
+}
+
+@article{broder2003bloom,
+  title        = {Network Applications of Bloom Filters: A Survey},
+  author       = {Broder, Andrei Z. and Mitzenmacher, Michael},
+  journaltitle = {Internet Mathematics},
+  volume       = {1},
+  number       = {4},
+  pages        = {485--509},
+  date         = {2004},
+  doi          = {10.1080/15427951.2004.10129096},
+  langid       = {english}
+}
+
+@article{mitzenmacher2001,
+  title        = {The Power of Two Choices in Randomized Load Balancing},
+  author       = {Mitzenmacher, Michael},
+  journaltitle = {IEEE Transactions on Parallel and Distributed Systems},
+  volume       = {12},
+  number       = {10},
+  pages        = {1094--1104},
+  date         = {2001},
+  doi          = {10.1109/71.963420},
+  langid       = {english}
+}
+
+@inproceedings{pibiri2021pthash,
+  title     = {{PTHash}: Revisiting {FCH} Minimal Perfect Hashing},
+  author    = {Pibiri, Giulio Ermanno and Trani, Roberto},
+  booktitle = {Proceedings of the 44th International {ACM} {SIGIR} Conference on Research and Development in Information Retrieval},
+  pages     = {1339--1348},
+  publisher = {{ACM}},
+  date      = {2021},
+  doi       = {10.1145/3404835.3462849},
+  langid    = {english}
+}
+
+@inproceedings{esposito2020recsplit,
+  title     = {{RecSplit}: Minimal Perfect Hashing via Recursive Splitting},
+  author    = {Esposito, Emmanuel and Graf, Thomas Mueller and Vigna, Sebastiano},
+  booktitle = {Proceedings of the Symposium on Algorithm Engineering and Experiments ({ALENEX} 2020)},
+  pages     = {175--185},
+  publisher = {{SIAM}},
+  date      = {2020},
+  doi       = {10.1137/1.9781611976007.14},
+  langid    = {english}
+}
+
+@article{gaffney2022sqlite,
+  title        = {SQLite: Past, Present, and Future},
+  author       = {Gaffney, Kevin P. and Prammer, Martin and Brasfield, Larry and Hipp, D. Richard and Kennedy, Dan and Patel, Jignesh M.},
+  journaltitle = {Proceedings of the VLDB Endowment},
+  volume       = {15},
+  number       = {12},
+  pages        = {3535--3547},
+  date         = {2022},
+  doi          = {10.14778/3554821.3554842},
+  langid       = {english}
+}
+
+@article{pagh2004low,
+  title        = {Low Independence Hash Functions Require Logarithmic Space},
+  author       = {Pagh, Rasmus},
+  journaltitle = {Random Structures \& Algorithms},
+  volume       = {25},
+  number       = {1},
+  pages        = {22--45},
+  date         = {2004},
+  doi          = {10.1002/rsa.20091},
+  langid       = {english}
 }

@@ -1,39 +1,31 @@
 \chapter{哈希表结构与算法设计}
 \label{ch:system}
 
-本章依照系统核心设定，给出分层哈希表各模块组件的完整结构与算法细节。内容覆盖 Facility 、 MiniArray、多层级 Cubby、Cubby 内 k-kick 与 Local Query Router，商压缩的实现，并在最后一节统一说明插入、查询与删除的操作语义。
+本章说明分层哈希表从理论设定到原型实现的对应关系。内容包括 facility、MiniArray、多层级 cubby、cubby 内 k-kick、Local Query Router 与商压缩实现，并统一给出插入、查询和删除语义。
 
-\section{Facility 与 MiniArray}
+\section{facility 与 MiniArray}
 
-\subsection{Facility 的基本属性}
+\subsection{facility 的基本属性}
 
-每个 Facility 对应全局表中的一个局部片段，规模为 \(K=\mathrm{polylog}\,N\)。Facility 管理其内部的全部 Cubby（包括各 tier 及唯一 tail），并维护 一个 Facility 层次的 MiniArray，用于定位键对应的 Cubby 。B 树的 fanout(上文有定义，fanout 为每个内部节点的子指针个数) 记为 \(F\)，取 \(F=\Theta(\log n/\log\log n)\)；树高为 \(O(1)\)，每个内部节点的子指针仅需 \(\Theta(\log\log n)\) 比特\cite{bender2022otsh,bayer1972,pagh2001}。
+每个 facility 对应全局表中的一个局部片段，规模为 \(K=\mathrm{polylog}\,N\)。facility 管理其内部的全部 cubby（包括各层级及唯一tail cubby），并维护一棵 facility 层的 MiniArray，用于定位键对应的 cubby。B 树的扇出（每个内部节点的子指针个数）记为 \(F\)，取 \(F=\Theta(\log n/\log\log n)\)；树高为 \(O(1)\)，每个内部节点的子指针仅需 \(\Theta(\log\log n)\) 比特\cite{bender2022otsh,bayer1972}。
 
 \subsection{MiniArray 的逻辑结构}
 
-MiniArray 由以下部分共同组成：
+MiniArray 由常数深度 B 树、紧凑叶节点、位图、秩/选择查询和查表结构共同组成：
 \begin{center}
   \small
-  MiniArray $\rightarrow$ $O(1)$ 深度 B 树 $\rightarrow$ Packed Leaf + Bitmap + Rank/Select + Lookup Table
+  MiniArray $\rightarrow$ $O(1)$ 深度 B 树 $\rightarrow$ 紧凑叶节点 + 位图 + Rank/Select + 查表
 \end{center}
 
-叶节点 Leaf 包含：
-\begin{itemize}
-  \item bitmap：用于标记叶内哪些逻辑位置已有有效元素，其大小与叶容量相同；
-  \item data：PackedArray，在有效位置上紧凑、无间隙地存放变长元素。
-\end{itemize}
+叶节点包含两部分：(1) 位图，用于标记叶内哪些逻辑位置已有有效元素，其大小与叶容量相同；(2) 紧凑数组，在有效位置上无间隙地存放变长元素。
 
-内部节点 Internal 包含：
-\begin{itemize}
-  \item subtree\_size$[F]$：每个子树中有效元素总数，供 Rank/Select 定位；
-  \item children$[F]$：至多 \(F\) 个子女指针，每个指针 \(\Theta(\log\log n)\) 比特。
-\end{itemize}
+内部节点只保留定位所需信息：(1) subtree\_size$[F]$，记录每个子树中的有效元素总数，供 Rank/Select 定位；(2) children$[F]$，至多 \(F\) 个子女指针，每个指针 \(\Theta(\log\log n)\) 比特。
 
 MiniArray 对外提供的接口函数为 Access(idx)、Insert(idx, val)、Delete(idx)、Update(idx, val)，其中 idx 为逻辑下标。叶容量上限为 MAX\_LEAF\_SIZE，由 NODE\_MAX\_BITS 常数 \(c\in[1,3]\) 产生\cite{bender2022otsh,kurpicz2023pachash,lehmann2024shockhash}。
 
 \subsection{Access：按逻辑下标读取}
 
-Access 操作的输入是逻辑下标，搜索过程自根向下逐层向下遍历，利用各层 subtree\_size 进行前缀和判断，将输入的逻辑下标映射到对应的目标叶节点；在叶子节点的内部用 Select 在 bitmap 上定位第 idx 个有效位置，再从 data 读出元素。树高为 \(O(1)\)，叶内 Select 算法通过 Lookup Table 常数时间完成\cite{jacobson1989,pagh2008retrieval,kurpicz2023pachash}， 不需要遍历比特串，获取到物理位置之后，直接从紧凑数组中读取对应的元素，并返回。
+访问操作的输入是逻辑下标。搜索过程自根向下遍历，利用各层 subtree\_size 进行前缀和判断，将逻辑下标映射到目标叶节点；随后在叶内用 Select 在位图上定位第 idx 个有效位置，再从紧凑数组读出元素。树高为 \(O(1)\)，叶内 Select 通过查表常数时间完成\cite{jacobson1989,pagh2008retrieval,kurpicz2023pachash}，流程见算法~\ref{alg:miniarray-access}。
 
 \begin{algorithm}[htbp]
   \caption{MiniArray.Access}
@@ -53,7 +45,7 @@ Access 操作的输入是逻辑下标，搜索过程自根向下逐层向下遍�
 
 \subsection{Insert：插入与叶分裂}
 
-插入过程中，Insert 在定位叶节点的过程中维护路径栈，为后续自底向上更新 subtree\_size 提供途径；在叶节点内用 Select 函数找到插入位置，将 bitmap 对应位置赋值为 1，并向 data 写入 val。若叶内有效元素数达到叶子容量的上限，就会调用 Split 对叶子节点进行分裂操作；插入与分裂检查完成之后，自底向上对路径栈中每个内部节点的 subtree\_size 加一， 以保证后续查询与定位的正确性。
+插入过程在定位叶节点时维护路径栈，供后续自底向上更新 subtree\_size。到达叶节点后，用 Select 找到插入位置，将位图对应位置置为 1，并向紧凑数组写入 val。若叶内有效元素数达到容量上限，则调用 Split 分裂叶节点；插入与分裂检查完成后，再沿路径栈把各内部节点的 subtree\_size 加一。具体流程见算法~\ref{alg:miniarray-insert}。
 
 \begin{algorithm}[htbp]
   \caption{MiniArray.Insert}
@@ -81,7 +73,7 @@ Access 操作的输入是逻辑下标，搜索过程自根向下逐层向下遍�
 
 \subsection{Delete：删除与叶合并}
 
-Delete 同样沿 subtree\_size 定位叶节点，用 Select 函数在 Bitmap 上找到待删元素的具体位置，清除 bitmap 对应位，并从 data 移除对应的元素。若叶内有效元素过少，低于阈值，调用 Merge 与相邻兄弟叶合并，合并可能需要多次操作才能保证 B 树恢复数据结构；最后自底向上将路径上 subtree\_size 减一。
+删除过程同样沿 subtree\_size 定位叶节点，用 Select 在位图上找到待删元素位置，清除对应位，并从紧凑数组移除元素。若叶内有效元素低于阈值，则调用 Merge 与相邻兄弟叶合并；路径上的 subtree\_size 随后自底向上减一。该过程见算法~\ref{alg:miniarray-delete}。
 
 \begin{algorithm}[htbp]
   \caption{MiniArray.Delete}
@@ -102,7 +94,7 @@ Delete 同样沿 subtree\_size 定位叶节点，用 Select 函数在 Bitmap 上
 
 \subsection{Update：原地覆写}
 
-Update 仅修改已有有效位置的元素值，不改变 bitmap 中 1 的个数，也不触发 Split/Merge。定位过程与 Access 相同，在叶内 Select 后直接 leaf.data[pos] $\gets$ val。
+更新过程仅修改已有有效位置的元素值，不改变位图中 1 的个数，也不触发 Split/Merge。定位过程与访问操作相同，在叶内 Select 后直接令 leaf.data[pos] $\gets$ val，如算法~\ref{alg:miniarray-update} 所示。
 
 \begin{algorithm}[htbp]
   \caption{MiniArray.Update}
@@ -117,7 +109,7 @@ Update 仅修改已有有效位置的元素值，不改变 bitmap 中 1 的个�
 
 \subsection{Split 与 Merge}
 
-Split（叶分裂）。 新建叶节点，以 leaf.size/2 为界将后半段 bitmap 与 data 迁至新叶，原叶保留前半段；在父节点 child 数组中插入新叶指针，并更新 subtree\_size 的分裂计数。
+Split（叶分裂）。新建叶节点，以 leaf.size/2 为界将后半段位图与紧凑数组迁至新叶，原叶保留前半段；随后在父节点 child 数组中插入新叶指针，并更新 subtree\_size，流程见算法~\ref{alg:miniarray-split}。
 
 \begin{algorithm}[htbp]
   \caption{MiniArray.Split（叶分裂）}
@@ -131,7 +123,7 @@ Split（叶分裂）。 新建叶节点，以 leaf.size/2 为界将后半段 bit
   \end{algorithmic}
 \end{algorithm}
 
-Merge（叶合并）。 取相邻兄弟叶，将兄弟的 bitmap 与 data 并入当前叶，从父节点删去兄弟子树并刷新 subtree\_size。
+Merge（叶合并）。取相邻兄弟叶，将兄弟的位图与紧凑数组并入当前叶，从父节点删去兄弟子树并刷新 subtree\_size，流程见算法~\ref{alg:miniarray-merge}。
 
 \begin{algorithm}[htbp]
   \caption{MiniArray.Merge（叶合并）}
@@ -145,11 +137,7 @@ Merge（叶合并）。 取相邻兄弟叶，将兄弟的 bitmap 与 data 并入
 
 \subsection{Rank 与 Select}
 
-叶子节点中 bitmap 上的 Rank/Select 通过 Lookup Table 实现，这是紧凑动态结构的标准组件\cite{jacobson1989,pagh2008retrieval,bender2022otsh,lehmann2026mphsurvey}：
-\begin{itemize}
-  \item Rank(bitmap, \(i\))：返回 bitmap 前 \(i\) 位中 1 的个数，等于 LookupTable 对高段与低段的查表结果之和；
-  \item Select(bitmap, \(k\))：返回 bitmap 中第 \(k\) 个 1 的位置，由 LookupTable\([k]\) 直接给出。
-\end{itemize}
+叶子节点中位图上的 Rank/Select 通过查表实现，这是紧凑动态结构的标准组件\cite{jacobson1989,pagh2008retrieval,bender2022otsh,lehmann2026mphsurvey}。Rank 返回位图前 \(i\) 位中 1 的个数，Select 返回位图中第 \(k\) 个 1 的位置；两者的伪代码见算法~\ref{alg:rank-select}。
 
 \begin{algorithm}[htbp]
   \caption{Rank / Select（查表实现）}
@@ -166,106 +154,95 @@ Merge（叶合并）。 取相邻兄弟叶，将兄弟的 bitmap 与 data 并入
 
 \subsection{复杂度与空间性质}
 
-Facility 级 MiniArray 的树高为 \(O(1)\)，自根至叶的每层路由仅依赖 subtree\_size 比较，叶内 Rank/Select 经 Lookup Table 常数时间完成\cite{jacobson1989,pagh2008retrieval}。因此 Access 与 Update 为最坏情况 \(O(1)\)；Insert 与 Delete 在叶分裂/合并均摊意义下亦为 \(O(1)\)\cite{bayer1972,bender2022otsh}。空间方面，每个内部节点的 \(F\) 个子指针各需 \(\Theta(\log\log n)\) 比特，叶节点以 bitmap 标记有效位置、以 PackedArray 无间隙存放变长元素，整体辅助位数与 \(O(\log^{(k)}n)\) 的全局预算相容\cite{kurpicz2023pachash,lehmann2024shockhash}。Cubby 内的 \(A\)、\(M\)、\(B\) 三组 MiniArray 复用同一套接口语义：\(A[i]\) 存 router 映射，\(M\) 存 bin 空闲图，\(B\) 与 storage 槽位一一对应存差分编码——三者在 k-kick 搬移时须原子同步更新。
+facility 级 MiniArray 的树高为 \(O(1)\)，自根至叶的每层路由仅依赖 subtree\_size 比较，叶内 Rank/Select 经查表结构常数时间完成\cite{jacobson1989,pagh2008retrieval}。因此 Access 与 Update 为最坏情况 \(O(1)\)；Insert 与 Delete 在叶分裂/合并均摊意义下亦为 \(O(1)\)\cite{bayer1972,bender2022otsh}。空间方面，每个内部节点的 \(F\) 个子指针各需 \(\Theta(\log\log n)\) 比特，叶节点以位图标记有效位置、以紧凑数组无间隙存放变长元素，整体辅助位数与 \(O(\log^{(k)}n)\) 的全局预算相容\cite{kurpicz2023pachash,lehmann2024shockhash}。cubby 内的 \(A\)、\(M\)、\(B\) 三组 MiniArray 复用同一套接口语义：\(A[i]\) 存局部路由映射，\(M\) 存子区间空闲图，\(B\) 与槽位数组一一对应存差分编码。三者在 k-kick 搬移时须同步更新。
 
-\section{多层级 Cubby 设计}
+\section{多层级 cubby 设计}
 
 \subsection{层级属性与初始状态}
 
-Facility 内 Cubby 按 tier 分级管理。\(j\)-tiered Cubby 的目标数量为
-\[
+facility 内 cubby 按层级管理。第 \(j\) 层 cubby 的目标数量为
+\begin{equation}
   t_j=\Theta\!\left(\frac{(\log^{(j+1)}n)^2}{(\log^{(j)}n)^2}\right),
-\]
+\end{equation}
 容量（槽位数）为
-\[
+\begin{equation}
   r_j=\frac{K}{(\log^{(j)}n)^2}.
-\]
-系统初始时，每个 Facility 仅包含一个 1-tiered Cubby，且该 Cubby 即为 tail。此后所有新键插入 tail；tail 满后，旧 tail 被视为一个普通的 1-tiered Cubby 挂入 tier 集合，并新建 tail 承接后续插入，该过程可能触发 tier 向上合并\cite{bender2022otsh,bender2024sosa,bender2024iceberg,pandey2023iceberght}。
+\end{equation}
+系统初始时，每个 facility 仅包含一个第 1 层 cubby，且该 cubby 即为tail cubby。此后所有新键插入tail cubby；tail cubby满后，旧tail cubby被视为一个普通第 1 层 cubby 挂入层级集合，并新建tail cubby承接后续插入，该过程可能触发层级向上合并\cite{bender2022otsh,bender2024sosa,bender2024iceberg,pandey2023iceberght}。
 
 \subsection{动态调整：合并与拆分}
 
-设当前 \(j\)-tiered Cubby 的实际个数为 \(\mathrm{cnt}_j\)。调度规则如下：
-\begin{itemize}
-  \item 当 \(\mathrm{cnt}_j\ge 3t_j\) 时，取出 \(t_j\) 个 \(j\)-tiered Cubby，将其内全部元素导出，合并为一个 \((j+1)\)-tiered Cubby 并重新插入；
-  \item 当 \(\mathrm{cnt}_j\le t_j/2\) 且存在非空的 \((j+1)\)-tiered Cubby 时，取出一个 \((j+1)\)-tiered Cubby，拆成 \(t_j\) 个 \(j\)-tiered Cubby 并重插元素；
-  \item 无论合并或拆分，均须取出 cubby 内所有元素重新插入，并同步更新对应 Cubby 中的 MiniArray \(A\)、\(M\)、\(B\) 与 storage，不能仅复制旧槽位内容（因 \(r_j\)、\(|I|\) 与商压缩上下文可能已变）\cite{bender2022otsh,conway2018,kuszmaul2024filters}。
-\end{itemize}
+设当前第 \(j\) 层 cubby 的实际个数为 \(\mathrm{cnt}_j\)，调度规则见算法~\ref{alg:tier-schedule}。(1) 当 \(\mathrm{cnt}_j\ge 3t_j\) 时，取出 \(t_j\) 个第 \(j\) 层 cubby，将其中元素导出，合并为一个第 \(j+1\) 层 cubby 后重新插入；(2) 当 \(\mathrm{cnt}_j\le t_j/2\) 且存在非空的第 \(j+1\) 层 cubby 时，取出一个第 \(j+1\) 层 cubby，拆成 \(t_j\) 个第 \(j\) 层 cubby 并重插元素；(3) 无论合并或拆分，均须取出 cubby 内所有元素重新插入，并同步更新对应 cubby 中的 MiniArray \(A\)、\(M\)、\(B\) 与槽位数组，不能仅复制旧槽位内容，因为 \(r_j\)、\(|I|\) 与商压缩上下文可能已经变化\cite{bender2022otsh,conway2018,kuszmaul2024filters}。
 
 \begin{algorithm}[htbp]
-  \caption{j-tiered cubby 数量调度}
+  \caption{第 \(j\) 层 cubby 数量调度}
   \label{alg:tier-schedule}
   \begin{algorithmic}[1]
-    \For{每个 tier 层级 \(j\)}
+    \For{每个层级 \(j\)}
       \State 计算目标数量 \(t_j\)，统计实际数量 \(\mathrm{cnt}_j\)
       \If{\(\mathrm{cnt}_j\ge 3t_j\)}
-        \State 取出 \(t_j\) 个 \(j\)-tiered Cubby，合并为一个 \((j+1)\)-tiered Cubby 并重新插入
-      \ElsIf{\(\mathrm{cnt}_j\le t_j/2\) 且 tier \(j+1\) 非空}
-        \State 取出一个 \((j+1)\)-tiered Cubby，拆成 \(t_j\) 个 \(j\)-tiered Cubby 并重新插入
+        \State 取出 \(t_j\) 个第 \(j\) 层 cubby，合并为一个第 \(j+1\) 层 cubby 并重新插入
+      \ElsIf{\(\mathrm{cnt}_j\le t_j/2\) 且第 \(j+1\) 层非空}
+        \State 取出一个第 \(j+1\) 层 cubby，拆成 \(t_j\) 个第 \(j\) 层 cubby 并重新插入
       \EndIf
     \EndFor
   \end{algorithmic}
 \end{algorithm}
 
-\subsection{Cubby 内部组件}
+\subsection{cubby 内部组件}
 
-每个容量为 \(|I|\) 的 Cubby 包含以下五部分：
+每个容量为 \(|I|\) 的 cubby 包含五部分：
 
-storage 数组。 长度为 \(|I|\)，存放键值的商压缩载荷；槽位 \(i\) 上的 storage\([i]\) 对应 \(\pi(x)[\log N+1,\log U]\) 的 payload 部分，完整键恢复依赖 \(B[i]\) 与全局上下文。
+(1) 槽位数组。长度为 \(|I|\)，存放键值的商压缩载荷；槽位 \(i\) 上的内容对应 \(\pi(x)[\log N+1,\log U]\) 的高位载荷部分，完整键恢复依赖 \(B[i]\) 与全局上下文。
 
-k-kick 插入逻辑。 在 storage 上按一定的规则动态决定元素实际槽位，并维护每个占用元素的 insert\_depth。
+(2) k-kick 插入逻辑。在槽位数组上按固定规则决定元素实际槽位，并维护每个占用元素的 insert\_depth。
 
-MiniArray \(A\)。 长度为 \(|I|\) 的 Local Query Router 数组；\(A[i]\) 是一棵二叉前缀树，管理所有满足 \(g_I(x)=i\) 的键。
+(3) MiniArray \(A\)。长度为 \(|I|\) 的 Local Query Router 数组；\(A[i]\) 是一棵二叉前缀树，管理所有满足 \(g_I(x)=i\) 的键。
 
-MiniArray \(M\)。 存储各 k-kick 深度 bin 的空闲槽位图，使插入、删除与 ReInsert 能在常数时间内判定 bin 是否含空位、定位空位，而不必扫描整个 Cubby。
+(4) MiniArray \(M\)。存储各 k-kick 深度子区间的空闲槽位图，使插入、删除与 ReInsert 能在常数时间内判定子区间是否含空位、定位空位，而不必扫描整个 cubby。
 
-MiniArray \(B\)。 与 storage 槽位一一对应。当 storage\([i]\) 存放键 \(x\) 的信息时，\(B[i]\) 保存
-\[
-  \delta=g_I(x)-i,\qquad g_I(x)=g^\ast(x)[\log|I|+1,\log K],
-\]
-以及 \(g^\ast(x)[\log|I|+1,\log K]\) 的中间位。配合 Facility 编号 \(r=g^\ast(x)[\log K+1,\log N]\) 与 payload，可完整恢复 \(\pi(x)\)\cite{bender2022otsh,pagh2008retrieval}。
+(5) MiniArray \(B\)。与槽位数组一一对应。当槽位 \(i\) 存放键 \(x\) 的信息时，\(B[i]\) 保存
+\begin{equation}
+  \delta=g_I(x)-i,
+\end{equation}
+以及 \(g^\ast(x)[\log|I|+1,\log K]\) 的中间位。配合 facility 编号 \(r=g^\ast(x)[\log K+1,\log N]\) 与高位载荷，可完整恢复 \(\pi(x)\)\cite{bender2022otsh,pagh2008retrieval}。
 
 \subsection{插入与删除操作}
 
-插入。 每次插入均进入当前 Facility 的 tail Cubby。若 tail 仍有空位，则在 tail 内执行 k-kick 插入；若 tail 已满，则新建 tail，并将已满的旧 tail 视作 1-tiered Cubby 挂入 1-tier Cubby 集合，该步骤可能因 \(\mathrm{cnt}_1\ge 3t_1\) 而触发向上合并。
+插入。每次插入均进入当前 facility 的tail cubby。若tail cubby仍有空位，则在其中执行 k-kick 插入；若tail cubby已满，则新建tail cubby，并将已满的旧tail cubby视作第 1 层 cubby 挂入第 1 层集合，该步骤可能因 \(\mathrm{cnt}_1\ge 3t_1\) 而触发向上合并。
 
-删除与 tail 回填。 若删除发生在 tail 之外的其他 Cubby，删除完成后从 tail 中\emph{随机}选取一个占用元素，经 k-kick 规则回填至刚空出的槽位，并更新 MiniArray \(A\)、\(M\)、\(B\) 与 storage。若 tail 在回填后为空，则从 1-tiered 层取出一个 Cubby 提升为 tail；该过程可能因 \(\mathrm{cnt}_i\le t_i\) 而触发向下拆分(甚至可能会触发多层)。上述不变量保证：除 tail 外，各 Cubby 尽量维持满载，局部波动由 tail 与 tier 调度共同吸收\cite{bender2022otsh,aamand2021dynamic,bansal2022deletions}。
+删除与tail cubby回填。若删除发生在tail cubby之外的其他 cubby，删除完成后从tail cubby中随机选取一个占用元素，经 k-kick 规则回填至刚空出的槽位，并更新 MiniArray \(A\)、\(M\)、\(B\) 与槽位数组。若tail cubby在回填后为空，则从第 1 层取出一个 cubby 提升为新的tail cubby；该过程可能因 \(\mathrm{cnt}_i\le t_i\) 而触发向下拆分，甚至触发多层调整。上述不变量使非tail cubby尽量维持满载，局部波动由tail cubby与层级调度共同吸收，伪代码见算法~\ref{alg:tail-ops}\cite{bender2022otsh,aamand2021dynamic,bansal2022deletions}。
 
 \begin{algorithm}[htbp]
-  \caption{tail 维护与删除回填}
+  \caption{tail cubby维护与删除回填}
   \label{alg:tail-ops}
   \begin{algorithmic}[1]
-    \State 插入：写入 tail；若 tail 满则旧 tail 归入 1-tiered Cubby 并新建 tail
-    \State 删除（非 tail）：释放被删槽位；从 tail 随机取元素 \(y\) 回填
+    \State 插入：写入tail cubby；若tail cubby满则旧tail cubby归入第 1 层 cubby 并新建tail cubby
+    \State 删除（非tail cubby）：释放被删槽位；从tail cubby随机取元素 \(y\) 回填
     \State 对 \(y\) 执行 k-kick 写入，更新 \(A,M,B\)
-    \If{tail 为空}
-      \State 从 1-tiered Cubby 提升一个 Cubby 为 tail；必要时触发 tier 拆分
+    \If{tail cubby为空}
+      \State 从第 1 层 cubby 提升一个 cubby 为tail cubby；必要时触发层级拆分
     \EndIf
   \end{algorithmic}
 \end{algorithm}
 
 \section{k-kick 层级插入算法}
 
-约定：Cubby 内算法中的 \(x\) 均指 \(\pi(x)\)（置换后的值），而非原始键；符号仍记为 \(x\)，设 Cubby 容量为 \(|I|\)。
+约定：cubby 内算法中的 \(x\) 均指 \(\pi(x)\)（置换后的值），而非原始键；符号仍记为 \(x\)，设 cubby 容量为 \(|I|\)。
 
-\subsection{层级 bin 定义}
+\subsection{层级子区间定义}
 
-k-kick 不对 storage 做物理分层，仅在逻辑上将 Cubby 划分为 \(k+1\) 个深度，\(k\) 为常数（通常 \(k\in[3,5]\)，基准取 4），定义不同层次的 bin：
-\begin{itemize}
-  \item 深度 0：唯一 bin 覆盖整个 Cubby，大小 \(s_0=K=\mathrm{polylog}\,n\)；
-  \item 深度 1：将深度 0 的 bin 均匀切分为许多大小 \(s_1=\Theta((\log K)^6)\) 的子 bin；
-  \item \( \dots \)
-  \item 深度 \(i\)（\(i\ge 1\)）：bin 大小 \(s_i=\Theta((\log^{(i)}K)^6)\)，由上一层 bin 继续均匀切分得到。
-\end{itemize}
+k-kick 不对槽位数组做物理分层，仅在逻辑上将 cubby 划分为 \(k+1\) 个深度，\(k\) 为常数（通常 \(k\in[3,5]\)，基准取 4）。深度 0 的唯一子区间覆盖整个 cubby，大小 \(s_0=K=\mathrm{polylog}\,n\)；深度 1 将深度 0 的子区间均匀切分为许多大小 \(s_1=\Theta((\log K)^6)\) 的子区间；一般地，深度 \(i\)（\(i\ge 1\)）的子区间大小为 \(s_i=\Theta((\log^{(i)}K)^6)\)，由上一层子区间继续均匀切分得到。
 
-定义函数 Bin(\(x,i\)) 返回键 \(x\) 在深度 \(i\) 所属 bin 的槽位区间：深度 0 时返回 \([0,|I|-1]\)；深度 \(i\ge 1\) 时在 Bin(\(x,i-1\)) 内按 \(s_i\) 均匀切分，并根据 \(x\) 的哈希比特在每一层中选定对应的一个子区间\cite{bender2022otsh,carter1979}。
+定义函数 Bin(\(x,i\)) 返回键 \(x\) 在深度 \(i\) 所属的槽位子区间：深度 0 时返回 \([0,|I|-1]\)；深度 \(i\ge 1\) 时在 Bin(\(x,i-1\)) 内按 \(s_i\) 均匀切分，并根据 \(x\) 的哈希比特在每一层中选定对应的一个子区间\cite{bender2022otsh,carter1979}。
 
 \subsection{偏好序列}
 
-对键 \(x\) 定义偏好序列
-\[
+对键 \(x\) 定义偏好序列，构造过程见算法~\ref{alg:pref-seq}：
+\begin{equation}
   g_0(x)\rightarrow g_1(x)\rightarrow\cdots\rightarrow g_k(x).
-\]
-其中 \(g_0(x)=\operatorname{Bin}(x,0)\) 为整个 Cubby；\(g_{i+1}(x)\) 为 \(g_i(x)\) 经均匀切分后 \(x\) 所落子 bin。于是 \(g_{i+1}(x)\) 一定是 \(g_i(x)\) 的子 bin；沿路径自顶向下，每一层均为上一层的随机子区间。自底向上回溯 \(g_k,g_{k-1},\ldots,g_0\) 即可得到全部祖先 bin。
+\end{equation}
+其中 \(g_0(x)=\operatorname{Bin}(x,0)\) 为整个 cubby；\(g_{i+1}(x)\) 为 \(g_i(x)\) 经均匀切分后 \(x\) 所落子区间。于是 \(g_{i+1}(x)\) 一定是 \(g_i(x)\) 的子区间；沿路径自顶向下，每一层均为上一层的随机子区间。自底向上回溯 \(g_k,g_{k-1},\ldots,g_0\) 即可得到全部祖先子区间。
 
 \begin{algorithm}[htbp]
   \caption{PreferenceSequence：偏好序列}
@@ -274,7 +251,7 @@ k-kick 不对 storage 做物理分层，仅在逻辑上将 Cubby 划分为 \(k+1
     \Function{PreferenceSequence}{$x$}
       \State $g[0]\gets\Call{Bin}{x,0}$
       \For{$i=1$ to $k$}
-        \State $g[i]\gets g[i-1]$ 内均匀切分后、$x$ 所属的子 bin
+        \State $g[i]\gets g[i-1]$ 内均匀切分后、$x$ 所属的子区间
       \EndFor
       \State 返回 $g[0..k]$
     \EndFunction
@@ -283,17 +260,17 @@ k-kick 不对 storage 做物理分层，仅在逻辑上将 Cubby 划分为 \(k+1
 
 \subsection{探测位置序列}
 
-\(h_j(x)\) 表示 \(x\) 在 Cubby storage 中的第 \(j\) 个候选槽位。序列按先深后浅顺序构造：依次遍历 \(g_k(x),g_{k-1}(x),\ldots,g_0(x)\)，并在每个 bin 内按槽位顺序枚举全部位置。
+\(h_j(x)\) 表示 \(x\) 在 cubby 槽位数组中的第 \(j\) 个候选槽位。序列按先深后浅顺序构造：依次遍历 \(g_k(x),g_{k-1}(x),\ldots,g_0(x)\)，并在每个子区间内按槽位顺序枚举全部位置，伪代码见算法~\ref{alg:probe-seq}。
 
-对深度 \(i\) 的 bin \(g_i(x)\)，设
-\[
+对深度 \(i\) 的子区间 \(g_i(x)\)，设
+\begin{equation}
   \mathrm{base}_i=s_k+s_{k-1}+\cdots+s_{i+1},
-\]
+\end{equation}
 则对任意 \(j\in[0,s_i-1]\)，全局探测序列中对应项为
-\[
+\begin{equation}
   h_{\mathrm{base}_i+j}(x)=g_i(x)\text{ 的第 }(j+1)\text{ 个槽位}.
-\]
-注意文档中下标公式 \(h_{(k+1-i)\cdot s_i+j}(x)\) 与 \(\mathrm{base}_i\) 表述等价：更深层的 bin 在序列中排在更前。序列总长度约为 \(\displaystyle\sum_{i=0}^{k}s_i\)；查询阶段并不线性扫描该序列，而由 Local Query Router 直接给出实际使用的下标 \(j\)\cite{bender2022otsh,pagh2004linear}。
+\end{equation}
+注意文档中下标公式 \(h_{(k+1-i)\cdot s_i+j}(x)\) 与 \(\mathrm{base}_i\) 表述等价：更深层的子区间在序列中排在更前。序列总长度约为 \(\displaystyle\sum_{i=0}^{k}s_i\)；查询阶段并不线性扫描该序列，而由 Local Query Router 直接给出实际使用的下标 \(j\)\cite{bender2022otsh,pagh2004linear}。
 
 \begin{algorithm}[htbp]
   \caption{ProbeSequence：探测位置序列（先深后浅）}
@@ -312,11 +289,11 @@ k-kick 不对 storage 做物理分层，仅在逻辑上将 Cubby 划分为 \(k+1
   \end{algorithmic}
 \end{algorithm}
 
-\subsection{bin 饱和与最大可用深度}
+\subsection{子区间饱和与最大可用深度}
 
-在深度 \(d\) 下，称 bin 饱和，当且仅当 bin 已满，且其中每个元素 \(y\) 均满足 y.insert\_depth \(\ge\) d。bin 未满时不饱和；bin 已满但存在 y.insert\_depth < d 的元素时，亦不视为饱和。
+在深度 \(d\) 下，称子区间饱和，当且仅当该子区间已满，且其中每个元素 \(y\) 均满足 y.insert\_depth \(\ge\) d。子区间未满时不饱和；子区间已满但存在 y.insert\_depth < d 的元素时，亦不视为饱和。
 
-GetMaxUsableDepth(\(x\)) 自 \(k\) 向 0 扫描偏好序列，返回最深的不饱和 bin 的深度；若全部饱和则返回 0(说明已满)。
+GetMaxUsableDepth(\(x\)) 自 \(k\) 向 0 扫描偏好序列，返回最深的不饱和子区间的深度；若全部饱和则返回 0。饱和判定与扫描过程见算法~\ref{alg:saturated}。
 
 \begin{algorithm}[htbp]
   \caption{IsSaturated 与 GetMaxUsableDepth}
@@ -343,11 +320,11 @@ GetMaxUsableDepth(\(x\)) 自 \(k\) 向 0 扫描偏好序列，返回最深的不
 
 \subsection{随机深度选择与 InsertKick}
 
-插入时须记录 insert\_depth 并在各深度 bin 间均匀分布。插入前先取随机哈希 \(s(x)\in[0,k]\)，再令
-\[
+插入时须记录 insert\_depth 并在各深度子区间间均匀分布。算法~\ref{alg:insert-kick} 中先取随机哈希 \(s(x)\in[0,k]\)，再令
+\begin{equation}
   \mathrm{depth}=\min(\Call{GetMaxUsableDepth}{x},\,s(x)).
-\]
-该式为随机深度与可用深度的 min 组合，对贪心上界形成软上限，使高深度 bin 更长时间保持未饱和。在目标 bin \(g_{\mathrm{depth}}(x)\) 中：若有空位，则写入 \(x\)、记录 x.insert\_depth = depth，并在 Local Query Router \(A[g_I(x)]\) 中登记探测下标 \(j\)；若无空位，则踢出 bin 内 insert\_depth 最小的元素 \(y\)，将 \(x\) 写入被踢槽位，再对 \(y\) 调用 ReInsert。整条踢出链至多触发 \(k\) 次，与 \(O(k)\) 交换上界一致\cite{bender2022otsh}。
+\end{equation}
+该式为随机深度与可用深度的 min 组合，对贪心上界形成软上限，使高深度子区间更长时间保持未饱和。在目标子区间 \(g_{\mathrm{depth}}(x)\) 中：若有空位，则写入 \(x\)、记录 x.insert\_depth = depth，并在 Local Query Router \(A[g_I(x)]\) 中登记探测下标 \(j\)；若无空位，则踢出子区间内 insert\_depth 最小的元素 \(y\)，将 \(x\) 写入被踢槽位，再对 \(y\) 调用 ReInsert。整条踢出链至多触发 \(k\) 次，与 \(O(k)\) 交换上界一致\cite{bender2022otsh}。
 
 \begin{algorithm}[htbp]
   \caption{InsertKick：k-kick 插入}
@@ -372,7 +349,7 @@ GetMaxUsableDepth(\(x\)) 自 \(k\) 向 0 扫描偏好序列，返回最深的不
 
 \subsection{ReInsert：被踢元素向上放入}
 
-插入发生踢出时，被踢元素须安置到合适深度；\textbf{ReInsert} 自 \(y.\)insert\_depth\(-1\) 向上逐层检查 Bin(\(y,d\))：若该 bin 在深度 \(d\) 下不饱和且有空位，或存在 insert\_depth 小于 \(d\) 的元素，则将 \(y\) 写入并可能继续踢出链式调用 ReInsert。深度降至 0 仍无法安置时 Cubby 已满，须新建 tail Cubby 并重试 InsertKick，与多层级 Cubby 设计衔接。MiniArray \(M\) 在此过程中的空位判定与定位均为常数时间。理论保证：在参数满足 Bender 等人\cite{bender2022otsh} 的设定时，极大概率至多 \(k\) 次 kick 后一定能安置被踢元素，如算法~\ref{alg:insert-kick} 所示。
+插入发生踢出时，被踢元素须安置到合适深度。ReInsert 自 \(y.\)insert\_depth\(-1\) 向上逐层检查 Bin(\(y,d\))：若该子区间在深度 \(d\) 下不饱和且有空位，或存在 insert\_depth 小于 \(d\) 的元素，则将 \(y\) 写入并可能继续踢出链式调用 ReInsert。深度降至 0 仍无法安置时，cubby 已满，须新建tail cubby并重试 InsertKick。MiniArray \(M\) 在此过程中的空位判定与定位均为常数时间。理论保证：在参数满足 Bender 等人\cite{bender2022otsh} 的设定时，极大概率至多 \(k\) 次踢出后一定能安置被踢元素。该过程见算法~\ref{alg:reinsert}。
 
 \begin{algorithm}[htbp]
   \caption{ReInsert：被踢元素向上找空位}
@@ -382,7 +359,7 @@ GetMaxUsableDepth(\(x\)) 自 \(k\) 向 0 扫描偏好序列，返回最深的不
       \For{$d=y.insert\_depth-1$ downto $0$}
         \State $\mathit{bin}\gets\Call{Bin}{y,d}$
         \If{\Call{IsSaturated}{$\mathit{bin}, d$}}
-          \State \textbf{continue}
+          \State continue
         \EndIf
         \If{$\mathit{bin}$ 有空位（由 $M$ 判定）}
           \State 将 $y$ 写入空位；$y.insert\_depth\gets d$
@@ -394,8 +371,8 @@ GetMaxUsableDepth(\(x\)) 自 \(k\) 向 0 扫描偏好序列，返回最深的不
           \State \Call{ReInsert}{$z$}；返回
         \EndIf
       \EndFor
-      \State 返回失败 \Comment{深度已降至 $0$ 仍无法安置，Cubby 已满}
-      \State 新建 tail cubby；在新 tail 中对 $y$ 重试 \Call{InsertKick}{}
+      \State 返回失败 \Comment{深度已降至 $0$ 仍无法安置，cubby 已满}
+      \State 新建tail cubby；在新tail cubby中对 $y$ 重试 \Call{InsertKick}{}
     \EndFunction
   \end{algorithmic}
 \end{algorithm}
@@ -404,38 +381,33 @@ GetMaxUsableDepth(\(x\)) 自 \(k\) 向 0 扫描偏好序列，返回最深的不
 
 单次 InsertKick 至多触发一条长度为 \(k\) 的踢出链：每次踢出仅调用一次 ReInsert，而被踢元素的 insert\_depth 严格下降，故链长受 \(k\) 约束，与 Bender 等人\cite{bender2022otsh} 的 \(O(k)\) 交换成本一致。
 
-GetMaxUsableDepth 自 \(k\) 向 0 扫描，返回最深的不饱和 bin；随机深度 \(\mathrm{depth}=\min(\mathrm{depth\_max},s(x))\) 在理论上保证：若存在可写 bin，则插入不会触发深层踢出，同时使不同深度的 bin 负载趋于均衡\cite{mitzenmacher2001}。
+GetMaxUsableDepth 自 \(k\) 向 0 扫描，返回最深的不饱和子区间；随机深度 \(\mathrm{depth}=\min(\mathrm{depth\_max},s(x))\) 在理论上保证：若存在可写子区间，则插入不会触发深层踢出，同时使不同深度的子区间负载趋于均衡。
 
-bin 中的是否存在空位与定位空位都通过 MiniArray \(M\) 完成，避免对整个 Cubby 进行依次遍历 \(O(|I|)\) 时间复杂度的扫描；ReInsert 从 y.insert\_depth-1 向上逐层检查，每层仅访问 \(M\) 与局部 bin 状态，均摊常数时间。
+子区间中是否存在空位与定位空位都通过 MiniArray \(M\) 完成，避免对整个 cubby 进行依次遍历 \(O(|I|)\) 时间复杂度的扫描；ReInsert 从 y.insert\_depth-1 向上逐层检查，每层仅访问 \(M\) 与局部子区间状态，均摊常数时间。
 
-元素每次写入或迁移，都需要同步更新 storage、insert\_depth、\(B\)、\(g_I(x)\) 中的 \(\pi(x)\mapsto j\) 映射对应的信息，以及 \(M\) 的空闲位图，这一同步规则是整个系统正常运行的前提，之后的操作才能正常运行。
+元素每次写入或迁移，都需要同步更新槽位数组、insert\_depth、\(B\)、\(g_I(x)\) 中的 \(\pi(x)\mapsto j\) 映射对应的信息，以及 \(M\) 的空闲位图，这一同步规则是整个系统正常运行的前提。
 
 \section{Local Query Router}
 
 \subsection{设计目标}
 
 偏好序列与探测位置序列 \(h_1(x),h_2(x),\ldots\) 在插入分析中完整定义了候选槽位顺序。然而 k-kick 插入会通过踢出动态挪动元素：元素实际位置一般不等于首选深度 \(g_k(x)\)，也不等于 \(h_1(x)\)。若查询仍沿 \(h_1,h_2,\ldots\) 线性扫描，时间复杂度将与探测序列长度同阶，无法达到 \(O(1)\)。因此必须为每个键保存精准映射
-\[
+\begin{equation}
   \pi(x)\longrightarrow j,
-\]
-其中 \(j\) 为探测序列中的下标，查询时直接访问下标 \(h_j(x)\) 对应的 storage 中的数据，再用 \(B\) 与 payload 三个数据恢复 \(\pi(x)\) 后与查询元素进行对比校验\cite{bender2022otsh,pagh2008retrieval}。
+\end{equation}
+其中 \(j\) 为探测序列中的下标，查询时直接访问下标 \(h_j(x)\) 对应的槽位，再用 \(B\) 与高位载荷恢复 \(\pi(x)\) 后与查询元素进行对比校验\cite{bender2022otsh,pagh2008retrieval}。
 
 \subsection{映射规则}
 
-Cubby 内定义局部首选槽位号（与 k-kick 偏好序列无关）：
-\[
+cubby 内定义局部首选槽位号（与 k-kick 偏好序列无关）：
+\begin{equation}
   g_I(x)=g^\ast(x)[1,\log|I|]\in[0,|I|-1].
-\]
-所有满足 \(g_I(x)=i\) 的键由第 \(i\) 号 Local Query Router \(A[i]\) 管理。查询时先计算 \(i=g_I(x)\)，再在 \(A[i]\) 中查询 \(\pi(x)\) 得到探测序列下标 \(j\)（若不存在则未命中）；随后访问 storage 中 \(h_j(x)\) 对应槽位，读取 payload 与 \(B\)，重建 \(g^\ast(x)\) 并校验是否命中。
+\end{equation}
+所有满足 \(g_I(x)=i\) 的键由第 \(i\) 号 Local Query Router \(A[i]\) 管理。查询时先计算 \(i=g_I(x)\)，再在 \(A[i]\) 中查询 \(\pi(x)\) 得到探测序列下标 \(j\)（若不存在则未命中）；随后访问 \(h_j(x)\) 对应槽位，读取高位载荷与 \(B\)，重建 \(g^\ast(x)\) 并校验是否命中。
 
 \subsection{二叉前缀树存储与接口}
 
-每个 \(A[i]\) 实现为一棵二叉前缀树；对外键为 \(\pi(x)\) 的比特串。接口为：
-\begin{itemize}
-  \item insert(key, j)：\(j\le\log K\)，仅需 \(O(\log\log n)\) 比特存储；如算法~\ref{alg:lqr-insert} 所示；
-  \item query(key)：返回 \(j\) 或“不存在”；如算法~\ref{alg:lqr-query} 所示；
-  \item delete(key)：删除映射。如算法~\ref{alg:lqr-delete} 所示。
-\end{itemize}
+每个 \(A[i]\) 实现为一棵二叉前缀树，对外键为 \(\pi(x)\) 的比特串。接口包括 insert(key, j)、query(key) 和 delete(key)：insert 记录 \(j\le\log K\) 的探测下标，每条映射只需 \(O(\log\log n)\) 比特；query 返回 \(j\) 或“不存在”；delete 删除对应映射。三者分别见算法~\ref{alg:lqr-insert}、算法~\ref{alg:lqr-query} 和算法~\ref{alg:lqr-delete}。
 
 树中不存完整键，仅存区分键的最短前缀；叶节点存 j\_value。
 
@@ -496,52 +468,43 @@ Cubby 内定义局部首选槽位号（与 k-kick 偏好序列无关）：
 
 \subsection{复杂度与 Patricia 压缩}
 
-对键长 \(\log U=\Theta(\log n)\) 的比特串，query 与 insert 沿树向下至多 \(\log U\) 步；Patricia 风格的前缀压缩\cite{morrison1968,pagh2008retrieval,lehmann2025combined} 将仅有一位不同的键合并为同一压缩边，使实测 router 深度（router\_steps\_max）远小于键长上界。每条映射存 \(j\le\log K=O(\log\log n)\) 比特，与整体 \(O(\log^{(k)}n)\) 空间目标一致\cite{bender2022otsh,kuszmaul2024filters}。
+对键长 \(\log U=\Theta(\log n)\) 的比特串，query 与 insert 沿树向下至多 \(\log U\) 步；Patricia 风格的前缀压缩\cite{morrison1968,pagh2008retrieval,lehmann2025combined} 将仅有一位不同的键合并为同一压缩边，使实测路由深度（router\_steps\_max）远小于键长上界。每条映射存 \(j\le\log K=O(\log\log n)\) 比特，与整体 \(O(\log^{(k)}n)\) 空间目标一致\cite{bender2022otsh,kuszmaul2024filters}。
 
-动态维护。 k-kick 踢出链中，被搬移键须 delete 旧映射再 insert 新 \(j\)；删除操作清空叶 j\_value 但不破坏共享前缀路径上的内部节点，均摊开销与 \(A[i]\) 所管理的局部键数相关。在 \(K=\mathrm{polylog}\,n\) 且 Cubby 容量 \(|I|\le K\) 的设定下，单个 \(A[i]\) 的规模受控，router 更新与查询均摊为常数时间\cite{bender2022otsh,bender2024sosa}。
+动态维护。 k-kick 踢出链中，被搬移键须删除旧映射再插入新 \(j\)；删除操作清空叶 j\_value 但不破坏共享前缀路径上的内部节点，均摊开销与 \(A[i]\) 所管理的局部键数相关。在 \(K=\mathrm{polylog}\,n\) 且 cubby 容量 \(|I|\le K\) 的设定下，单个 \(A[i]\) 的规模受控，路由更新与查询均摊为常数时间\cite{bender2022otsh,bender2024sosa}。
 
 \section{商压缩与键恢复}
 
 \subsection{设计动机与信息分工}
 
-当前层次结构中，查询路由需用映射后二进制低位定位 Facility 与 Cubby 内数组；若槽位仍存完整键，则寻址路径上的信息上下文被重复占用。商压缩借助随机可逆置换 \(\pi\)，将键映射为 \(\pi(x)\)，并按下述原则拆分信息：\(\pi(x)\) 的低 \(\log N\) 位 \(g^\ast(x)=\pi(x)[1,\log N]\) 的各段位由全局路由与局部地址上下文（Facility 编号、Cubby 容量、实际槽位下标）及 MiniArray \(B\) 中的差分元数据共同承担；槽位 storage 仅保存无法由上述上下文直接推出的高位商，即 payload
-\[
+当前层次结构中，查询路由需用映射后二进制低位定位 facility 与 cubby 内数组；若槽位仍存完整键，则寻址路径上的信息上下文被重复占用。商压缩借助随机可逆置换 \(\pi\)，将键映射为 \(\pi(x)\)，并按下述原则拆分信息：\(\pi(x)\) 的低 \(\log N\) 位 \(g^\ast(x)=\pi(x)[1,\log N]\) 的各段位由全局路由与局部地址上下文（facility 编号、cubby 容量、实际槽位下标）及 MiniArray \(B\) 中的差分元数据共同承担；槽位数组仅保存无法由上述上下文直接推出的高位商，即高位载荷
+\begin{equation}
   \mathrm{payload}=\pi(x)[\log N+1,\log U].
-\]
-查询时 Local Query Router 给出探测位置序列 j , \(h_j(x)\) 定位到 storage 中的具体位置，然后从 storage\([h_j(x)]\)、\(B[h_j(x)]\) 与 Facility/Cubby 上下文联立恢复完整 \(\pi(x)\)，再经 \(\pi^{-1}\) 得到原始键。该分工使每个元素在槽位层面仅占用 \(\log U-\log N\) 比特的有效载荷，而将路由相关的 \(\log N\) 位分散到地址结构与变长元数据中，与整体 \(O(\log^{(k)}n)\) 空间目标一致\cite{bender2022otsh,pagh2008retrieval}。
+\end{equation}
+查询时 Local Query Router 给出探测位置序列下标 \(j\)，\(h_j(x)\) 定位到槽位数组中的具体位置，然后从该槽位、\(B[h_j(x)]\) 与 facility/cubby 上下文联立恢复完整 \(\pi(x)\)，再经 \(\pi^{-1}\) 得到原始键。该分工使每个元素在槽位层面仅占用 \(\log U-\log N\) 比特的有效载荷，而将路由相关的 \(\log N\) 位分散到地址结构与变长元数据中，与整体 \(O(\log^{(k)}n)\) 空间目标一致\cite{bender2022otsh,pagh2008retrieval}。
 
 \subsection{\texorpdfstring{\(\pi(x)\) 与 \(g^\ast(x)\) 的位段划分}{pi(x) 与 g*(x) 的位段划分}}
 
 记 \(x[a,b]\) 为 \(x\) 自第 \(a\) 位至第 \(b\) 位（自低位向高位）组成的子串。对键 \(x\) 经置换得 \(\pi(x)\)，全局路由哈希为
-\[
+\begin{equation}
   g^\ast(x)=\pi(x)[1,\log N].
-\]
-在 \(g^\ast(x)\) 内部，自高向低继续划分为三段（见图~\ref{fig:gx-layout}，第二章已给出示意）：
-\begin{itemize}
-  \item Facility 编号段：\(r=g^\ast(x)[\log K+1,\log N]=\lfloor g^\ast(x)/K\rfloor\)，用于定位键所属 Facility；
-  \item Cubby 中间段：\(g^\ast(x)[\log|I|+1,\log K]\)，用于在 Facility 内区分不同 Cubby 及局部桶范围；
-  \item Local Query Router 段：\(g_I(x)=g^\ast(x)[1,\log|I|]\in[0,|I|-1]\)，与 k-kick 偏好序列无关，仅决定键归属 \(A[i]\) 的桶号 \(i\)。
-\end{itemize}
+\end{equation}
+在 \(g^\ast(x)\) 内部，自高向低继续划分为三段（见图~\ref{fig:gx-layout}，前文已给出示意）：(1) facility 编号段 \(r=g^\ast(x)[\log K+1,\log N]=\lfloor g^\ast(x)/K\rfloor\)，用于定位键所属 facility；(2) cubby 中间段 \(g^\ast(x)[\log|I|+1,\log K]\)，用于在 facility 内区分不同 cubby 及局部桶范围；(3) Local Query Router 段 \(g_I(x)=g^\ast(x)[1,\log|I|]\in[0,|I|-1]\)，与 k-kick 偏好序列无关，仅决定键归属 \(A[i]\) 的桶号 \(i\)。
 
 k-kick 插入可能将元素 \(x\) 写入槽位 \(i\neq g_I(x)\) 的实际位置。此时 \(g_I(x)\) 无法由槽位下标 \(i\) 直接读出，须额外保存差分
-\[
+\begin{equation}
   \delta=g_I(x)-i,
-\]
+\end{equation}
 存入 MiniArray \(B[i]\)。
 
 \subsection{MiniArray \texorpdfstring{\(B\)}{B} 中的 MetaEntry}
 
-每个占用槽位 \(i\) 对应一条变长元数据 MetaEntry，经 MiniArray \(B\) 的 Access/Update 接口读写。逻辑字段如下：
-\begin{itemize}
-  \item delta：有符号整数 \(\delta=g_I(x)-i\)，编码为 zigzag varint，适应 k-kick 搬移后槽位与 router 桶号的不一致；
-  \item mid\_bits：\(g^\ast(x)\) 在 Cubby 范围内的中间位，即 \(g_k=g^\ast(x)\bmod K\) 满足 \(g_k=mid\_bits\cdot|I|+g_I(x)\) 的商部分 \(\lfloor g_k/|I|\rfloor\)；位宽 \(\texttt{mid\_w}=\lceil\log_2((K-1)/|I|+1)\rceil\)，由 \((K,|I|)\) 派生；
-\end{itemize}
+每个占用槽位 \(i\) 对应一条变长元数据 MetaEntry，经 MiniArray \(B\) 的 Access/Update 接口读写。逻辑字段包括两部分：(1) delta，即有符号整数 \(\delta=g_I(x)-i\)，编码为 zigzag varint，用于适应 k-kick 搬移后槽位与路由桶号的不一致；(2) mid\_bits，即 \(g^\ast(x)\) 在 cubby 范围内的中间位。令 \(g_k=g^\ast(x)\bmod K\)，则 \(g_k=mid\_bits\cdot|I|+g_I(x)\)，其中 mid\_bits 对应商部分 \(\lfloor g_k/|I|\rfloor\)，位宽 \(\texttt{mid\_w}=\lceil\log_2((K-1)/|I|+1)\rceil\)，由 \((K,|I|)\) 派生。
 
-编码顺序为：先写入 delta 的 varint，再写入 mid\_bits 的固定位宽字段；解码时按相同布局与 MetaCodecLayout 逆序读出。\(B[i]\) 的 bitlen 随条目实际长度变化，由 Facility 级 MiniArray 的 Rank/Select 机制定位，与第二章所述变长元数据维护方式一致。
+编码顺序为：先写入 delta 的 varint，再写入 mid\_bits 的固定位宽字段；解码时按相同布局与 MetaCodecLayout 逆序读出。\(B[i]\) 的 bitlen 随条目实际长度变化，由 facility 级 MiniArray 的 Rank/Select 机制定位，与前文所述变长元数据维护方式一致。
 
 \subsection{恢复：重建 \texorpdfstring{\(\pi(x)\)}{pi(x)}}
 
-给定 Facility 编号 \(r\)、Cubby 容量 \(|I|\)、槽位下标 \(i\)、storage\([i]\) 中的 payload 及 \(B[i]\) 解码得到的 MetaEntry，按下式自底向上重建 \(g^\ast(x)\) 与 \(\pi(x)\)：
+给定 facility 编号 \(r\)、cubby 容量 \(|I|\)、槽位下标 \(i\)、槽位中的高位载荷及 \(B[i]\) 解码得到的 MetaEntry，可按算法~\ref{alg:reconstruct-gx} 自底向上重建 \(g^\ast(x)\) 与 \(\pi(x)\)：
 \begin{align}
   g_I(x) &= i+\delta, \\
   g_k &= \texttt{mid\_bits}\cdot|I|+g_I(x), \\
@@ -568,7 +531,7 @@ k-kick 插入可能将元素 \(x\) 写入槽位 \(i\neq g_I(x)\) 的实际位置
 
 \subsection{查询校验}
 
-查询键 \(x\) 时，Router 给出探测下标 \(j\)，访问候选槽位 \(i=h_j(x)\)。只有当完整恢复的值与查询的值相同，才认为查询命中：
+查询键 \(x\) 时，Router 给出探测下标 \(j\)，访问候选槽位 \(i=h_j(x)\)。只有当完整恢复的值与查询的值相同，才认为查询命中，校验过程见算法~\ref{alg:slot-match}：
 
 \begin{algorithm}[htbp]
   \caption{SlotPiMatches：槽位命中校验}
@@ -584,23 +547,196 @@ k-kick 插入可能将元素 \(x\) 写入槽位 \(i\neq g_I(x)\) 的实际位置
   \end{algorithmic}
 \end{algorithm}
 
-Router 仅负责将查询映射到 \(O(I)\) 个候选位置；最终是否命中必须由 payload、\(B\) 与 \((r,N,K,|I|)\) 联立恢复的 \(\pi(x)\) 与查询侧计算的 \(\pi(x)\) 一致方可确认。该“Router 定位 + 商压缩校验”的两段式路径，是系统能够不存储完整键的前提\cite{bender2022otsh,pagh2008retrieval}。
-
-
-\subsection{空间性质}
-
-单个占用槽位的比特开销可分解为：（1）storage 中 \(\log U-\log N\) 比特 payload；（2）\(B[i]\) 中变长 MetaEntry，其中， \(\delta\) 采用 varint 编码，长度会随 \(|g_I(x)-i|\) 增大而增加，mid\_bits 占 \(\Theta(\log(K/|I|))\) 比特，router\_bits 与 insert\_bits 为常数宽度。Facility 编号 \(r\) 与 Cubby 容量 \(|I|\) 作为查询路径上的上下文信息，不重复写入每个槽位。整体上来看，商压缩将 \(\pi(x)\) 中与寻址重叠的低位从槽位载荷中抽离，使附加空间与 \(O\log^{(k)}n\) 级预算相容；MiniArray \(B\) 的变长编码则使元数据按条目实际所需位数记录，避免为所有槽位预留固定最大键长\cite{kurpicz2023pachash,lehmann2024shockhash}。
+路由器仅负责将查询映射到 \(O(I)\) 个候选位置；最终是否命中必须由高位载荷、\(B\) 与 \((r,N,K,|I|)\) 联立恢复的 \(\pi(x)\) 与查询侧计算的 \(\pi(x)\) 一致方可确认。该“路由器定位 + 商压缩校验”的两段式路径，是系统能够不存储完整键的前提\cite{bender2022otsh,pagh2008retrieval}。
 
 \section{插入、查询与删除}
 
-插入。 计算 \(g^\ast(x)=\pi(x)[1,\log N]\) 与 Facility 编号 \(r\)；在对应 Facility 的 tail Cubby 内执行 InsertKick（算法~\ref{alg:insert-kick}），写入 storage、更新 \(M\) 与 \(B[i]\)，并在 \(A[g_I(x)]\) 中 insert(\(\pi(x),j\))。tail 满则挂入 1-tiered cubby 并新建 tail，必要时按算法~\ref{alg:tier-schedule} 触发合并\cite{bender2022otsh,mitzenmacher2001}。
+插入。计算 \(g^\ast(x)=\pi(x)[1,\log N]\) 与 facility 编号 \(r\)；在对应 facility 的tail cubby内执行 InsertKick（算法~\ref{alg:insert-kick}），写入槽位数组、更新 \(M\) 与 \(B[i]\)，并在 \(A[g_I(x)]\) 中插入 \(\pi(x)\mapsto j\) 映射。tail cubby满则挂入第 1 层 cubby 并新建tail cubby，必要时按算法~\ref{alg:tier-schedule} 触发合并\cite{bender2022otsh}。
 
-查询。 计算 \(g^\ast(x)\) 定位 Facility 与 Cubby；令 \(i=g_I(x)\)，在 \(A[i]\) 中 query(\(\pi(x)\)) 得 \(j\)；访问 \(h_j(x)\)，用 payload、\(B\)、\(r\) 重建 \(g^\ast(x)\) 并与 \(\pi(x)\) 比较。该路径仅含常数次 MiniArray 与 Local Query Router 访问，查询时间为 \(O(1)\)\cite{bender2022otsh}。
+查询。计算 \(g^\ast(x)\) 定位 facility 与 cubby；令 \(i=g_I(x)\)，在 \(A[i]\) 中查询 \(\pi(x)\) 得 \(j\)；访问 \(h_j(x)\)，用高位载荷、\(B\)、\(r\) 重建 \(g^\ast(x)\) 并与 \(\pi(x)\) 比较。该路径仅含常数次 MiniArray 与 Local Query Router 访问，查询时间为 \(O(1)\)\cite{bender2022otsh}。
 
-删除。 定位元素所在 Cubby 与槽位，清空 storage，更新 \(A[g_I(x)]\).delete(\(\pi(x)\))、\(M\)与 \(B\)。若删除发生在非 tail Cubby，按算法~\ref{alg:tail-ops} 从 tail 随机抽取元素回填；回填写入同样走 k-kick 与 Local Query Router 更新路径，以恢复各 bin 的饱和与深度不变量。
+删除。定位元素所在 cubby 与槽位，清空槽位数组中对应位置，更新 \(A[g_I(x)]\)、\(M\) 与 \(B\)。若删除发生在非tail cubby，按算法~\ref{alg:tail-ops} 从tail cubby随机抽取元素回填；回填写入同样走 k-kick 与 Local Query Router 更新路径，以恢复各子区间的饱和与深度不变量。
 
-表级扩缩容时，\(N\)、\(K\)、\(r_j\) 与商压缩上下文变化，须先恢复原始键再按新参数重插，而不能直接复制旧槽位的 payload 与 \(B\)\cite{bender2022otsh,bender2024sosa}。
+表级扩缩容时，\(N\)、\(K\)、\(r_j\) 与商压缩上下文变化，须先恢复原始键再按新参数重插，而不能直接复制旧槽位的高位载荷与 \(B\)\cite{bender2022otsh,bender2024sosa}。
+
+\section{冷热分层键存储实现}
+
+原始多层级小桶结构侧重紧凑空间和常数时间查询，所有键都由内存中的 facility、cubby 与 Slot 管理。该结构适合观察 k-kick、MiniArray 和 Local Query Router 的组合效果，但在工程实现中也带来一个问题：冷数据仍然要参与层级合并、拆分和删除回填。若进一步要求持久化，直接把每一层 cubby 的状态写入磁盘并不方便。cubby 容量、槽位下标和 \(B\) 中的差分信息依赖当前结构上下文，Local Query Router 的映射也会随着搬移变化。本文的冷热分层方案没有沿用完整多层级冷数据结构，而是保留tail cubby作为内存热层，将不再活跃的键批量下沉到 SQLite 中。
+
+冷热分层结构仍以 facility 编号作为表级分区依据。每个分区维护一个内存tail cubby和一组冷数据记录。tail cubby接收近期插入的键。其内部仍使用 k-kick 插入，并用 MiniArray \(M\)、MiniArray \(B\) 和 Local Query Router 维护状态。SQLite 冷层只保存已经下沉的键。热层命中时，系统继续复用第三章前文的局部查询与键恢复逻辑；热层未命中时，再把冷数据当作数据库记录查询或删除。
+
+冷层记录至少包含原始键、所属 facility 编号和必要的状态标记。实验原型中只存键，不存完整 cubby 上下文；这是一个有意的简化。原因在于下沉后的键不再参与内存 cubby 的 k-kick 置换，也不需要依赖 \(g_I(x)\)、槽位下标和 \(B[i]\) 恢复键。换言之，冷热分层结构把冷数据管理从“维护多层小桶结构”改成“维护数据库键记录”。这会放弃部分紧凑空间性质，但可以减少冷数据继续参与内存层级调度带来的实现复杂度。
+
+插入操作根据 \(g^\ast(x)\) 定位 facility，然后把键写入该 facility 的tail cubby。若tail cubby未满，插入路径与前文 InsertKick 相同。系统先选择可用深度并写入槽位数组。随后更新 \(M\) 与 \(B\)，并把路由映射写入 \(A[g_I(x)]\)。若tail cubby写满，冷热分层结构不再把旧tail cubby挂入多层级 cubby 集合，而是将旧tail cubby中仍有效的键导出，使用 SQLite 批量事务写入冷层，随后清空内存热层并新建tail cubby。
+
+批量下沉保留原有哈希语义，同时减少每次插入都访问 SQLite 的成本。若每个键插入时都立即写入数据库，写入路径会频繁触发事务和索引维护；tail cubby则把近期写入暂存在内存中，等容量达到阈值后再集中刷入数据库。本文实验中的冷热分层结构按这一口径统计插入延迟：单次插入包含热层写入和必要的轮换准备，但收尾阶段的数据库刷盘检查不计入每个操作的平均延迟。
+
+查询操作先访问内存热层。系统根据 \(g^\ast(x)\) 定位 facility，再计算 \(g_I(x)\)，通过 Local Query Router 查询候选槽位下标 \(j\)。若路由器返回有效映射，则访问 \(h_j(x)\) 对应槽位，并通过高位载荷、\(B\) 和上下文信息恢复 \(\pi(x)\) 进行校验；校验通过时直接返回命中。若热层未命中，系统再以原始键访问 SQLite 冷层。在写后读和近期访问负载下，一部分查询会停留在内存路径；在随机冷查询或热层命中率较低时，查询仍需要进入数据库，并额外承担一次热层判断的成本。这也是第五章没有把冷热分层结构描述为无条件更快的原因。
+
+删除操作也沿用这一顺序。如果目标键仍在tail cubby中，系统先删除槽位中的载荷，再清理 \(A[g_I(x)]\) 中的映射，并同步更新 \(M\) 和 \(B\)。由于冷热分层结构不把旧tail cubby挂入多层级 cubby 集合，删除近期键时不需要从tail cubby抽取元素去回填其他层级 cubby，也不会触发多层级向上合并或向下拆分。
+
+若热层未命中，系统转向 SQLite 冷层删除对应记录。为了避免同一个键同时存在于热层和冷层，原型采用单向下沉规则：键插入后先处于热层，tail cubby轮换时才进入冷层；冷层键不会重新搬回热层。查询和删除都按“先热层、后冷层”的顺序执行，因此即使某次下沉刚完成，后续操作也能在两层之一找到唯一记录。该规则比完整缓存淘汰策略简单，但足以支撑第五章的写后读、近期查询和近期删除实验。
+
+和原始结构相比，冷热分层实现保留了 facility 分区、tail cubby内的 k-kick 置换、MiniArray 元数据和 Local Query Router；热层命中时仍然通过商压缩恢复和校验键。被简化的是冷数据部分：冷数据不再组织为多层级 cubby，删除冷数据时也不再执行tail cubby回填和层级重构。这个边界需要明确说明：冷热分层结构是在基础原型上增加 SQLite 冷数据层，没有完整持久化 Bender 等人的理论结构。
+
+\begin{figure}[htbp]
+  \centering
+  \resizebox{0.88\textwidth}{!}{
+  \begin{tikzpicture}[node distance=8mm and 16mm]
+  
+  \node[io] (start) {输入查询键 $x$};
+  \node[block, below=of start] (hash) {计算 $\pi(x),\ g^\ast(x)$\\定位 facility 编号 $r$};
+  \node[block, below=of hash] (hot) {优先访问 facility $r$ 的\\内存热层 tail cubby};
+  \node[block, below=of hot] (router) {计算 $g_I(x)$\\查询 Local Query Router: $A[g_I(x)]$};
+  \node[decision, below=of router, yshift=-1mm] (valid) {是否存在\\有效映射?};
+  
+  \node[block, below left=15mm and 24mm of valid] (slot) {根据映射访问候选槽位 $h_j(x)$};
+  \node[block, below=of slot] (recover) {结合高位载荷、$B$ 与上下文信息\\恢复并校验 $\pi(x)$};
+  \node[decision, below=of recover, yshift=-1mm] (hit) {热层\\是否命中?};
+  \node[io, below left=13mm and 12mm of hit] (hotend) {返回热层命中};
+  
+  \node[datastore, below right=16mm and 24mm of valid] (sqlite) {SQLite\\冷层};
+  \node[block, below=of sqlite] (coldquery) {以原始键查询冷层记录};
+  \node[decision, below=of coldquery, yshift=-1mm] (coldhit) {冷层\\是否命中?};
+  \node[io, below left=13mm and 10mm of coldhit] (coldend1) {返回冷层命中};
+  \node[io, below right=13mm and 10mm of coldhit] (coldend2) {返回未命中};
+  
+  \node[note, right=8mm of hot] (note1) {
+  查询顺序\\
+  先访问内存热层；\\
+  热层未命中后再查询 SQLite；\\
+  因此随机冷查询会额外承担一次热层判断成本。
+  };
+  
+  \draw[line] (start) -- (hash);
+  \draw[line] (hash) -- (hot);
+  \draw[line] (hot) -- (router);
+  \draw[line] (router) -- (valid);
+  
+  \draw[line] (valid) -- node[above left] {是} (slot);
+  \draw[line] (slot) -- (recover);
+  \draw[line] (recover) -- (hit);
+  \draw[line] (hit) -- node[above left] {是} (hotend);
+  
+  \draw[line] (valid.east) -- ++(13mm,0) |- node[pos=0.2, above] {否} (sqlite.north);
+  \draw[line] (hit.east) -- ++(12mm,0) |- node[pos=0.15, above] {否} (sqlite.west);
+  
+  \draw[line] (sqlite) -- (coldquery);
+  \draw[line] (coldquery) -- (coldhit);
+  \draw[line] (coldhit) -- node[above left] {是} (coldend1);
+  \draw[line] (coldhit) -- node[above right] {否} (coldend2);
+  
+  \end{tikzpicture}
+  }
+  \caption{冷热分层结构的查询流程}
+  \label{fig:hot-cold-query}
+  \end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \resizebox{0.88\textwidth}{!}{
+  \begin{tikzpicture}[node distance=8mm and 16mm]
+  
+  \node[io] (start) {输入插入键 $x$};
+  \node[block, below=of start] (hash) {计算 $\pi(x),\ g^\ast(x)$\\定位 facility 编号 $r$};
+  \node[block, below=of hash] (tail) {进入 facility $r$ 的\\内存热层 tail cubby};
+  \node[decision, below=of tail, yshift=-1mm] (full) {tail cubby\\是否已满?};
+  
+  \node[block, below left=16mm and 22mm of full] (notfull) {未满：执行 InsertKick\\在 tail cubby 内进行 k-kick 插入};
+  \node[block, below=of notfull] (update1) {写入槽位数组\\更新 MiniArray $M$、MiniArray $B$};
+  \node[block, below=of update1] (router1) {写入 Local Query Router\\更新 $A[g_I(x)]$};
+  \node[io, below=of router1] (end1) {插入完成};
+  
+  \node[block, below right=16mm and 22mm of full] (export) {已满：导出旧 tail cubby 中\\仍有效的键};
+  \node[datastore, below=of export] (sqlite) {SQLite\\冷层};
+  \node[block, below=of sqlite] (batch) {使用批量事务写入冷层\\只保存键/记录，不保存完整 cubby 上下文};
+  \node[block, below=of batch] (newtail) {清空旧 tail cubby\\新建内存热层 tail cubby};
+  \node[block, below=of newtail] (insertnew) {将当前键 $x$ 插入新 tail cubby\\并更新 $M,B,A[g_I(x)]$};
+  \node[io, below=of insertnew] (end2) {插入完成};
+  
+  \node[note, right=8mm of sqlite] (note1) {
+  批量下沉含义\\
+  冷数据不再参与多层级 cubby 调度；\\
+  不再执行冷层 k-kick 置换；\\
+  SQLite 仅作为冷数据记录层。
+  };
+  
+  \draw[line] (start) -- (hash);
+  \draw[line] (hash) -- (tail);
+  \draw[line] (tail) -- (full);
+  
+  \draw[line] (full) -- node[above left] {否} (notfull);
+  \draw[line] (notfull) -- (update1);
+  \draw[line] (update1) -- (router1);
+  \draw[line] (router1) -- (end1);
+  
+  \draw[line] (full) -- node[above right] {是} (export);
+  \draw[line] (export) -- (sqlite);
+  \draw[line] (sqlite) -- (batch);
+  \draw[line] (batch) -- (newtail);
+  \draw[line] (newtail) -- (insertnew);
+  \draw[line] (insertnew) -- (end2);
+  
+  \end{tikzpicture}
+  }
+  \caption{冷热分层结构的插入流程}
+  \label{fig:hot-cold-insert}
+  \end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \resizebox{0.88\textwidth}{!}{
+  \begin{tikzpicture}[node distance=8mm and 16mm]
+  
+  \node[io] (start) {输入删除键 $x$};
+  \node[block, below=of start] (hash) {计算 $\pi(x),\ g^\ast(x)$\\定位 facility 编号 $r$};
+  \node[block, below=of hash] (hot) {优先访问 facility $r$ 的\\内存热层 tail cubby};
+  \node[block, below=of hot] (router) {计算 $g_I(x)$\\查询 Local Query Router / 候选槽位};
+  \node[block, below=of router] (check) {恢复并校验 $\pi(x)$};
+  \node[decision, below=of check, yshift=-1mm] (hit) {热层\\是否命中?};
+  
+  \node[block, below left=16mm and 24mm of hit] (delhot) {删除热层槽位中的载荷};
+  \node[block, below=of delhot] (clear) {清理 $A[g_I(x)]$ 中的映射\\同步更新 MiniArray $M$ 与 $B$};
+  \node[io, below=of clear] (endhot) {删除完成};
+  
+  \node[datastore, below right=16mm and 24mm of hit] (sqlite) {SQLite\\冷层};
+  \node[block, below=of sqlite] (delcold) {以原始键删除冷层记录};
+  \node[io, below=of delcold] (endcold) {删除完成};
+  
+  \node[note, right=8mm of clear] (note1) {
+  删除简化\\
+  不再从 tail cubby 抽取元素回填其他层级；\\
+  不触发多层级 cubby 合并或拆分；\\
+  冷层删除退化为数据库记录删除。
+  };
+  
+  \node[note, right=8mm of hot] (note2) {
+  唯一性规则\\
+  键先进入热层；\\
+  tail cubby 轮换时单向下沉；\\
+  冷层键不重新搬回热层。
+  };
+  
+  \draw[line] (start) -- (hash);
+  \draw[line] (hash) -- (hot);
+  \draw[line] (hot) -- (router);
+  \draw[line] (router) -- (check);
+  \draw[line] (check) -- (hit);
+  
+  \draw[line] (hit) -- node[above left] {是} (delhot);
+  \draw[line] (delhot) -- (clear);
+  \draw[line] (clear) -- (endhot);
+  
+  \draw[line] (hit) -- node[above right] {否} (sqlite);
+  \draw[line] (sqlite) -- (delcold);
+  \draw[line] (delcold) -- (endcold);
+  
+  \end{tikzpicture}
+  }
+  \caption{冷热分层结构的删除流程}
+  \label{fig:hot-cold-delete}
+  \end{figure}
 
 \section{本章小结}
 
-本章给出分层哈希表的主要结构与算法：Facility 级 MiniArray 以 B 树、Rank/Select 与 Split/Merge 维护变长元数据\cite{bayer1972,jacobson1989}；多层级 Cubby 与 tail 机制定义 tier 调度与删除回填不变量\cite{bender2024iceberg,pandey2023iceberght}；k-kick 经偏好序列、饱和判定、InsertKick 与 ReInsert 实现 \(O(k)\) 交换插入\cite{bender2022otsh,pagh2004cuckoo}；Local Query Router 经 \(A[i]\) 前缀树将查询降为 \(O(1)\)\cite{morrison1968,pagh2008retrieval}。四组件同步更新规则贯穿插入、踢出、删除回填与扩缩容重插；第四章报告各参数下的性能测量。
+本章给出分层哈希表的主要结构与算法。facility 级 MiniArray 负责变长元数据定位，依赖 B 树、Rank/Select 与 Split/Merge 维持常数深度访问\cite{bayer1972,jacobson1989}。多层级 cubby 与tail cubby机制吸收插入和删除带来的局部波动；k-kick 通过偏好序列和饱和判定控制单次更新中的交换次数\cite{bender2022otsh,pagh2004cuckoo}。查询路径由 Local Query Router 接管，它把探测序列扫描改为对 \(A[i]\) 前缀树的定位\cite{morrison1968,pagh2008retrieval}。这些模块不能独立更新。槽位数组、\(A\)、\(M\)、\(B\) 在插入、踢出、删除回填和扩缩容重插中都必须保持一致。冷热分层键存储在此基础上保留内存tail cubby的 k-kick 管理，把下沉后的键交给 SQLite 冷层保存。第四章先报告多层级原型结构在不同参数下的功能与性能测量；第五章再讨论冷热分层结构与两个对照方案之间的实验差异。

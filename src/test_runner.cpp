@@ -390,7 +390,7 @@ int main()
 
     {
         HashTable ht;
-        TableParams p = preset_by_name("n_1e3");
+        TableParams p = preset_by_name("n_1e3_K64");
         p.enable_rebuild_down = false;
         p.enable_rebuild_up = false;
         if (run_case("single_table_workload_init", ht.init(p).ok, cases))

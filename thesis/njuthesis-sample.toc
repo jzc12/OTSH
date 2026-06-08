@@ -1,0 +1,79 @@
+\contentsline {chapter}{\bigger \normalfont \sffamily 目\hskip 2em\relax {}录}{V}{chapter*.3}%
+\contentsline {chapter}{\bigger \normalfont \sffamily \numberline {第一章}引言}{1}{chapter.1}%
+\contentsline {section}{\numberline {1.1}实验背景及意义}{1}{section.1.1}%
+\contentsline {section}{\numberline {1.2}国内外研究现状}{2}{section.1.2}%
+\contentsline {section}{\numberline {1.3}本文主要工作}{3}{section.1.3}%
+\contentsline {section}{\numberline {1.4}本文组织结构}{3}{section.1.4}%
+\contentsline {chapter}{\bigger \normalfont \sffamily \numberline {第二章}问题模型与理论基础}{5}{chapter.2}%
+\contentsline {section}{\numberline {2.1}探测复杂度与球槽分配模型}{5}{section.2.1}%
+\contentsline {section}{\numberline {2.2}系统核心设定：全域与哈希基础}{6}{section.2.2}%
+\contentsline {subsection}{\numberline {2.2.1}全局参数}{6}{subsection.2.2.1}%
+\contentsline {subsection}{\numberline {2.2.2}可逆置换与全局路由哈希}{6}{subsection.2.2.2}%
+\contentsline {subsection}{\numberline {2.2.3}facility 编号与 cubby 内局部地址}{7}{subsection.2.2.3}%
+\contentsline {section}{\numberline {2.3}核心组件层级关系}{7}{section.2.3}%
+\contentsline {section}{\numberline {2.4}商压缩的信息论思想}{8}{section.2.4}%
+\contentsline {section}{\numberline {2.5}k-kick、MiniArray 与 Local Query Router}{9}{section.2.5}%
+\contentsline {subsection}{\numberline {2.5.1}k-kick：逻辑分层与交换上界}{9}{subsection.2.5.1}%
+\contentsline {subsection}{\numberline {2.5.2}MiniArray \(M\)}{10}{subsection.2.5.2}%
+\contentsline {subsection}{\numberline {2.5.3}Local Query Router：\(O(1)\) 查询与映射存储}{10}{subsection.2.5.3}%
+\contentsline {subsection}{\numberline {2.5.4}辅助结构同步不变量}{10}{subsection.2.5.4}%
+\contentsline {section}{\numberline {2.6}本章小结}{11}{section.2.6}%
+\contentsline {chapter}{\bigger \normalfont \sffamily \numberline {第三章}哈希表结构与算法设计}{13}{chapter.3}%
+\contentsline {section}{\numberline {3.1}facility 与 MiniArray}{13}{section.3.1}%
+\contentsline {subsection}{\numberline {3.1.1}facility 的基本属性}{13}{subsection.3.1.1}%
+\contentsline {subsection}{\numberline {3.1.2}MiniArray 的逻辑结构}{13}{subsection.3.1.2}%
+\contentsline {subsection}{\numberline {3.1.3}Access：按逻辑下标读取}{14}{subsection.3.1.3}%
+\contentsline {subsection}{\numberline {3.1.4}Insert：插入与叶分裂}{14}{subsection.3.1.4}%
+\contentsline {subsection}{\numberline {3.1.5}Delete：删除与叶合并}{14}{subsection.3.1.5}%
+\contentsline {subsection}{\numberline {3.1.6}Update：原地覆写}{16}{subsection.3.1.6}%
+\contentsline {subsection}{\numberline {3.1.7}Split 与 Merge}{16}{subsection.3.1.7}%
+\contentsline {subsection}{\numberline {3.1.8}Rank 与 Select}{16}{subsection.3.1.8}%
+\contentsline {subsection}{\numberline {3.1.9}复杂度与空间性质}{17}{subsection.3.1.9}%
+\contentsline {section}{\numberline {3.2}多层级 cubby 设计}{17}{section.3.2}%
+\contentsline {subsection}{\numberline {3.2.1}层级属性与初始状态}{17}{subsection.3.2.1}%
+\contentsline {subsection}{\numberline {3.2.2}动态调整：合并与拆分}{18}{subsection.3.2.2}%
+\contentsline {subsection}{\numberline {3.2.3}cubby 内部组件}{18}{subsection.3.2.3}%
+\contentsline {subsection}{\numberline {3.2.4}插入与删除操作}{19}{subsection.3.2.4}%
+\contentsline {section}{\numberline {3.3}k-kick 层级插入算法}{19}{section.3.3}%
+\contentsline {subsection}{\numberline {3.3.1}层级子区间定义}{20}{subsection.3.3.1}%
+\contentsline {subsection}{\numberline {3.3.2}偏好序列}{20}{subsection.3.3.2}%
+\contentsline {subsection}{\numberline {3.3.3}探测位置序列}{20}{subsection.3.3.3}%
+\contentsline {subsection}{\numberline {3.3.4}子区间饱和与最大可用深度}{21}{subsection.3.3.4}%
+\contentsline {subsection}{\numberline {3.3.5}随机深度选择与 InsertKick}{22}{subsection.3.3.5}%
+\contentsline {subsection}{\numberline {3.3.6}ReInsert：被踢元素向上放入}{22}{subsection.3.3.6}%
+\contentsline {subsection}{\numberline {3.3.7}复杂度与正确性}{24}{subsection.3.3.7}%
+\contentsline {section}{\numberline {3.4}Local Query Router}{24}{section.3.4}%
+\contentsline {subsection}{\numberline {3.4.1}设计目标}{24}{subsection.3.4.1}%
+\contentsline {subsection}{\numberline {3.4.2}映射规则}{25}{subsection.3.4.2}%
+\contentsline {subsection}{\numberline {3.4.3}二叉前缀树存储与接口}{25}{subsection.3.4.3}%
+\contentsline {subsection}{\numberline {3.4.4}复杂度与 Patricia 压缩}{27}{subsection.3.4.4}%
+\contentsline {section}{\numberline {3.5}商压缩与键恢复}{27}{section.3.5}%
+\contentsline {subsection}{\numberline {3.5.1}设计动机与信息分工}{27}{subsection.3.5.1}%
+\contentsline {subsection}{\numberline {3.5.2}\(\mitpi (x)\) 与 \(g^\ast (x)\) 的位段划分}{28}{subsection.3.5.2}%
+\contentsline {subsection}{\numberline {3.5.3}MiniArray \(B\) 中的 MetaEntry}{28}{subsection.3.5.3}%
+\contentsline {subsection}{\numberline {3.5.4}恢复：重建 \(\mitpi (x)\)}{29}{subsection.3.5.4}%
+\contentsline {subsection}{\numberline {3.5.5}查询校验}{29}{subsection.3.5.5}%
+\contentsline {section}{\numberline {3.6}插入、查询与删除}{30}{section.3.6}%
+\contentsline {section}{\numberline {3.7}冷热分层键存储实现}{30}{section.3.7}%
+\contentsline {section}{\numberline {3.8}本章小结}{32}{section.3.8}%
+\contentsline {chapter}{\bigger \normalfont \sffamily \numberline {第四章}系统性能实验}{37}{chapter.4}%
+\contentsline {section}{\numberline {4.1}实验目的与环境}{37}{section.4.1}%
+\contentsline {section}{\numberline {4.2}实验方案}{37}{section.4.2}%
+\contentsline {section}{\numberline {4.3}规模 $n$ 实验}{38}{section.4.3}%
+\contentsline {section}{\numberline {4.4}facility 规模 $K$ 实验}{39}{section.4.4}%
+\contentsline {section}{\numberline {4.5}k-kick 深度 $k$ 实验}{40}{section.4.5}%
+\contentsline {section}{\numberline {4.6}多层级 cubby 动态重构实验}{40}{section.4.6}%
+\contentsline {section}{\numberline {4.7}本章小结}{42}{section.4.7}%
+\contentsline {chapter}{\bigger \normalfont \sffamily \numberline {第五章}冷热分层存储对照实验}{43}{chapter.5}%
+\contentsline {section}{\numberline {5.1}实验目的与方案设置}{43}{section.5.1}%
+\contentsline {section}{\numberline {5.2}负载与统计口径}{43}{section.5.2}%
+\contentsline {section}{\numberline {5.3}多层级内存结构对照}{44}{section.5.3}%
+\contentsline {section}{\numberline {5.4}纯数据库结构对照}{44}{section.5.4}%
+\contentsline {section}{\numberline {5.5}空间占用与正确性对照}{45}{section.5.5}%
+\contentsline {section}{\numberline {5.6}本章小结}{46}{section.5.6}%
+\contentsline {chapter}{\bigger \normalfont \sffamily \numberline {第六章}总结与展望}{47}{chapter.6}%
+\contentsline {section}{\numberline {6.1}工作总结}{47}{section.6.1}%
+\contentsline {section}{\numberline {6.2}不足与局限}{47}{section.6.2}%
+\contentsline {section}{\numberline {6.3}展望}{48}{section.6.3}%
+\contentsline {chapter}{\bigger \normalfont \sffamily 参考文献}{49}{chapter*.25}%
+\contentsline {chapter}{\bigger \normalfont \sffamily 致\hskip 2em\relax {}谢}{55}{chapter*.26}%

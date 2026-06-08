@@ -3,12 +3,23 @@
     "groups": {
         "n": {
             "presets": [
-                "n_1e3",
-                "n_1e4",
-                "n_1e5"
+                "n_1e3_K64",
+                "n_1e3_K128",
+                "n_1e3_K256",
+                "n_1e4_K64",
+                "n_1e4_K128",
+                "n_1e4_K256",
+                "n_1e5_K64",
+                "n_1e5_K128",
+                "n_1e5_K256"
             ],
-            "K": "log^3 n",
-            "k": 4,
+            "K": [
+                64,
+                128,
+                256
+            ],
+            "N": "next_pow2(n)",
+            "k": 3,
             "workload": "uniform_mixed",
             "metrics": [
                 "ins_us",

@@ -3,15 +3,13 @@
 
 \section{实验目的与环境}
 
-本章基于第二、三章给出的结构与参数设定，对已实现的哈希系统进行性能测试和功能验证。实验围绕操作延迟、k-kick 踢出次数、多层级 Cubby 向下拆分（rebuild\_down）与向上合并（rebuild\_up）三类指标展开，用于检查第三章各模块在实际运行中的效果\cite{bender2022otsh,bender2024sosa}。
+本章基于前两章给出的结构与参数设定，对多层级小桶哈希原型进行性能测试和功能验证。实验记录操作延迟、k-kick 踢出次数、多层级小桶向下拆分与向上合并次数，用于检查第三章各模块在实际运行中的表现\cite{bender2022otsh,bender2024sosa}。本章只讨论基础多层级结构本身，冷热分层改造及其对照结果放在下一章说明。
 
-实验的系统代码基于 C++23 标准开发实现，在 AMD Ryzen 7 6800H 处理器、Windows 10 环境下运行。元素规模 \(n\in\{10^3,10^4,10^5\}\)，Facility 规模 \(K\) 按分组取多档（基准 \(K=\log^3 n\)），k-kick 最大深度 \(k\in\{3,4,5\}\)（基准 \(k=4\)），NODE\_MAX\_BITS 常数 \(c=2\)。键由 std::mt19937\_64 在固定种子 seed=1（经 seed1/seed2/seed3 派生表内哈希参数）下均匀生成；实验报告单次 workload 内各操作类型的平均延迟。
+实验系统基于 C++23 标准开发，在 AMD Ryzen 7 6800H 处理器、Windows 10 环境下运行。元素规模 \(n\in\{10^3,10^4,10^5\}\)，facility 规模 \(K\) 按分组取多档（基准 \(K=\log^3 n\)），k-kick 最大深度 \(k\in\{3,4,5\}\)（基准 \(k=4\)），NODE\_MAX\_BITS 常数 \(c=2\)。键由 \texttt{std::mt19937\_64} 在固定随机种子 1 下均匀生成，表内哈希参数由该种子派生；实验报告单次负载内各操作类型的平均延迟。
 
 \section{实验方案}
 
-\subsection{实验分组与工作量}
-
-实验分为四组，如表~\ref{tab:exp-plan} 所示。规模 \(n\) 组与 \(K\) 组、\(k\) 组采用键均匀分布于各 Facility 的混合增删负载；Cubby 动态重构组按纯插入、纯删除及不同插入/删除比例构造 workload，分别触发 rebuild\_up 与 rebuild\_down。
+实验分为四组，如表~\ref{tab:exp-plan} 所示。规模 \(n\) 组与 \(K\) 组、\(k\) 组采用键均匀分布于各 facility 的混合增删负载；cubby 动态重构组按纯插入、纯删除及不同插入/删除比例构造负载，分别触发向上合并与向下拆分。
 
 \begin{table}[htbp]
   \centering
@@ -22,47 +20,47 @@
     \toprule
     分组 & 负载方式 & 主要验证内容 \\
     \midrule
-    规模 \(n\) & 均匀分布、混合增删 & 操作延迟、踢出、rebuild \\
-    Facility \(K\) & 均匀分布、混合增删 & 操作延迟、踢出 \\
+    规模 \(n\) & 均匀分布、混合增删 & 操作延迟、踢出、重构 \\
+    facility \(K\) & 均匀分布、混合增删 & 操作延迟、踢出 \\
     k-kick & 均匀分布、高负载 & 操作延迟、踢出 \\
-    Cubby & Insert/Delete/混合比例 & rebuild\_down、rebuild\_up、重构耗时 \\
+    cubby & 插入、删除、混合比例 & 向下拆分、向上合并、重构耗时 \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\subsection{评价指标}
-
-为量化评估系统的基础性能，实验记录并分析以下指标：
-
-\begin{itemize}
-  \item 操作延迟：插入、命中查询和删除的平均延迟。该指标用于衡量哈希 系统基础操作的运行性能；
-  \item k-kick：workload 内累计踢出次数，以及单次插入/删除搬移最大次数 insert\_moved\_max、delete\_moved\_max。该指标用于观察 k-kick 核心模块的具体表现，并判断模块的基础踢出功能是否生效；
-  \item j-tiered Cubby：rebuild\_down（向下拆分）与 rebuild\_up（向上合并）触发次数。该指标用于验证多层级的 Cubby 的合并与拆分功能是否正常触发；
-\end{itemize}
+实验记录的指标包括：(1) 操作延迟，即插入、命中查询和删除的平均耗时，用于观察基础操作的运行成本；(2) k-kick 踢出情况，包括一次负载内的累计踢出次数，以及单次插入、删除过程中元素搬移次数是否超过设定深度；(3) 多层级小桶重构情况，包括向下拆分和向上合并的触发次数，用于检查层级调度是否按实现规则执行。
 
 \section{规模 \texorpdfstring{$n$}{n} 实验}
 
-固定 \(K=\log^3 n\)、\(k=4\)、\(c=2\)，令 \(n\) 从 \(10^3\) 增至 \(10^5\)。表~\ref{tab:exp-n-fixed} 给出各档测量结果。
+固定 \(K\in\{64,128,256\}\)、\(k=3\)、\(c=2\)，令 \(n\) 从 \(10^3\) 增至 \(10^5\)，各规模在三档 facility 下分别测量。表~\ref{tab:exp-n-fixed} 给出全部结果。
 
 \begin{table}[htbp]
   \centering
-  \caption{规模 \(n\) 实验结果（\(K=\log^3 n\)，\(k=4\)，键均匀分布）}
+  \caption{规模 \(n\) 实验结果（\(K\in\{64,128,256\}\)，\(k=3\)，键均匀分布）}
   \label{tab:exp-n-fixed}
   \footnotesize
-  \begin{tabular}{lrrrrrr}
+  \begin{tabular}{llrrrrrr}
     \toprule
-    $n$ &
-    ins ($\mu$s) & qry ($\mu$s) & del ($\mu$s) &
-    总踢出 & rebuild\_down & rebuild\_up \\
+    $n$ & $K$ &
+    插入 ($\mu$s) & 查询 ($\mu$s) & 删除 ($\mu$s) &
+    总踢出 & 向下拆分 & 向上合并 \\
     \midrule
-    $10^3$  & 49.1 & 2.2  & 66.0 & 80     & 11    & 179   \\
-    $10^4$  & 42.0 & 2.7  & 71.6 & 1157   & 77    & 930   \\
-    $10^5$  & 60.8 & 5.1  & 2051.9 & 10485 & 11447 & 21502 \\
+    $10^3$ & 64   & 49.4 & 2.1 & 69.7 & 37   & 16    & 191   \\
+           & 128  & 50.5 & 2.3 & 69.0 & 35   & 23    & 213   \\
+           & 256  & 52.9 & 2.3 & 69.8 & 13   & 8     & 215   \\
+    \midrule
+    $10^4$ & 64   & 47.6 & 3.2 & 82.5 & 822  & 434   & 2149  \\
+           & 128  & 49.1 & 2.8 & 69.4 & 538  & 295   & 2361  \\
+           & 256  & 49.6 & 2.7 & 70.0 & 325  & 186   & 2450  \\
+    \midrule
+    $10^5$ & 64   & 76.2 & 8.6 & 498.0 & 7535  & 10521 & 45018 \\
+           & 128  & 84.2 & 5.9 & 526.9 & 4725  & 10794 & 52417 \\
+           & 256  & 82.3 & 4.5 & 564.2 & 2751  & 11497 & 56349 \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\noindent 表中 rebuild\_down 对应向下拆分的次数，rebuild\_up 对应向上合并的次数。
+\noindent 表中向下拆分和向上合并分别对应多层级小桶数量过少或过多时触发的重构次数。
 
 \begin{figure}[htbp]
   \centering
@@ -82,32 +80,32 @@
       grid=major,
       grid style={dashed,gray!30},
     ]
-    \addplot[mark=*, blue, thick] coordinates {(1000,49.1) (10000,42.0) (100000,60.8)};
+    \addplot[mark=*, blue, thick] coordinates {(1000,49.4) (10000,47.6) (100000,76.2)};
     \addlegendentry{插入}
-    \addplot[mark=square*, red, thick] coordinates {(1000,2.2) (10000,2.7) (100000,5.1)};
+    \addplot[mark=square*, red, thick] coordinates {(1000,2.1) (10000,3.2) (100000,8.6)};
     \addlegendentry{查询}
-    \addplot[mark=triangle*, green!60!black, thick] coordinates {(1000,66.0) (10000,71.6) (100000,2051.9)};
+    \addplot[mark=triangle*, green!60!black, thick] coordinates {(1000,69.7) (10000,82.5) (100000,498.0)};
     \addlegendentry{删除}
     \end{axis}
   \end{tikzpicture}
-  \caption{规模 $n$ 实验中三种操作平均延迟（$K=\log^3 n$，$k=4$，键均匀分布）}
+  \caption{规模 $n$ 实验中三种操作平均延迟（$K=64$，$k=3$，键均匀分布；另两档 $K$ 见表~\ref{tab:exp-n-fixed}）}
   \label{fig:exp-n-latency}
 \end{figure}
 
-随 \(n\) 增大，命中查询延迟由 2.2\,$\mu$s 升至 5.1\,$\mu$s，相对三个数量级跨度增幅平缓，与 Local Query Router 的常数步定位一致\cite{bender2022otsh,morrison1968}。插入延迟在 42.0--60.8\,$\mu$s 之间，\(n=10^3\) 略高（49.1\,$\mu$s），与 Facility 数较少、单桶局部竞争有关。删除延迟由 66.0\,$\mu$s 增至 2051.9\,$\mu$s，增幅远高于插入：\(n=10^5\) 时 rebuild 合计约 3.3 万次，删除路径上的 tail 回填、tier 拆分及 MiniArray 同步均叠加在热路径上（见图~\ref{fig:exp-n-latency}）。累计踢出由 80 增至 \(1.0\times 10^4\)，rebuild\_down 由 11 增至 11447 次、rebuild\_up 由 179 增至 21502 次；大规模下 j-tiered Cubby 维护最为频繁\cite{bender2024iceberg,pandey2023iceberght}。
+随 \(n\) 增大，三档 \(K\) 下命中查询延迟均缓慢上升：\(n=10^3\) 时为 2.1--2.3\,$\mu$s，\(n=10^5\) 时为 4.5--8.6\,$\mu$s，与 Local Query Router 的常数步定位一致\cite{bender2022otsh,morrison1968}；同一规模下 \(K\) 越大、facility 数越少，查询略低。插入延迟在 \(n\le 10^4\) 时三档 \(K\) 差异不大（47.6--52.9\,$\mu$s），\(n=10^5\) 升至 76.2--84.2\,$\mu$s。删除延迟在 \(n\le 10^4\) 时稳定在 69--83\,$\mu$s；\(n=10^5\) 时升至 498--564\,$\mu$s，\(K=64\) 档两类重构合计约 5.6 万次，删除路径上的 tail cubby 回填、层级拆分及 MiniArray 同步均叠加在热路径上（图~\ref{fig:exp-n-latency} 以 \(K=64\) 为例）。累计踢出随 \(n\) 显著增多，且同一 \(n\) 下 \(K\) 越小踢出越多（如 \(n=10^5\) 时由 7535 降至 2751）；向下拆分与向上合并在大规模下均为维护主要来源\cite{bender2024iceberg,pandey2023iceberght}。
 
-\section{Facility 规模 \texorpdfstring{$K$}{K} 实验}
+\section{facility 规模 \texorpdfstring{$K$}{K} 实验}
 
 固定 \(k=4\)，在 \(n\in\{10^3,10^4,10^5\}\) 三档下各取多组 \(K\) 比较三操作延迟与踢出。表~\ref{tab:exp-K-1e3}--\ref{tab:exp-K-1e5} 汇总实测结果（键均匀分布）。
 
 \begin{table}[htbp]
   \centering
-  \caption{Facility 规模 \(K\) 实验（\(n=10^3\)，\(k=4\)）}
+  \caption{facility 规模 \(K\) 实验（\(n=10^3\)，\(k=4\)）}
   \label{tab:exp-K-1e3}
   \small
   \begin{tabular}{lrrrr}
     \toprule
-    $K$ & ins ($\mu$s) & qry ($\mu$s) & del ($\mu$s) & 总踢出 \\
+    $K$ & 插入 ($\mu$s) & 查询 ($\mu$s) & 删除 ($\mu$s) & 总踢出 \\
     \midrule
     16   & 22.6 & 2.1 & 52.8 & 112 \\
     64   & 49.9 & 2.0 & 67.7 & 60  \\
@@ -118,12 +116,12 @@
 
 \begin{table}[htbp]
   \centering
-  \caption{Facility 规模 \(K\) 实验（\(n=10^4\)，\(k=4\)）}
+  \caption{facility 规模 \(K\) 实验（\(n=10^4\)，\(k=4\)）}
   \label{tab:exp-K-fixed}
   \small
   \begin{tabular}{lrrrr}
     \toprule
-    $K$ & ins ($\mu$s) & qry ($\mu$s) & del ($\mu$s) & 总踢出 \\
+    $K$ & 插入 ($\mu$s) & 查询 ($\mu$s) & 删除 ($\mu$s) & 总踢出 \\
     \midrule
     64    & 56.9 & 2.8 & 75.9 & 813 \\
     256   & 54.1 & 2.7 & 70.9 & 916 \\
@@ -134,12 +132,12 @@
 
 \begin{table}[htbp]
   \centering
-  \caption{Facility 规模 \(K\) 实验（\(n=10^5\)，\(k=4\)）}
+  \caption{facility 规模 \(K\) 实验（\(n=10^5\)，\(k=4\)）}
   \label{tab:exp-K-1e5}
   \small
   \begin{tabular}{lrrrr}
     \toprule
-    $K$ & ins ($\mu$s) & qry ($\mu$s) & del ($\mu$s) & 总踢出 \\
+    $K$ & 插入 ($\mu$s) & 查询 ($\mu$s) & 删除 ($\mu$s) & 总踢出 \\
     \midrule
     256   & 98.9  & 4.2 & 504.9  & 6889 \\
     1024  & 185.2 & 3.4 & 518.3  & 6883 \\
@@ -148,11 +146,11 @@
   \end{tabular}
 \end{table}
 
-\(n=10^3\) 时 \(K=16\) 插入最快（22.6\,$\mu$s），但踢出最多（112 次）；\(K\ge 64\) 时踢出降至约 60 次，增删延迟略升，体现小 \(n\) 下 Facility 过细反而增加路由与维护开销。\(n=10^4\) 三档 \(K\) 下查询均在 2.6--2.8\,$\mu$s，踢出随 \(K\) 增大变化不大（813--963），说明中等规模下 \(K\) 对均匀负载的边际影响有限。\(n=10^5\) 时 \(K=4096\) 删除延迟（127.1\,$\mu$s）明显低于 \(K=256/1024\)（504--518\,$\mu$s），与大规模 rebuild 主要落在较小 \(K\) 档、大 Facility 缓解局部冲突一致；\(K=1024\) 插入异常偏高（185.2\,$\mu$s）可能与 Facility 数与 Cubby 布局的组合有关，部署时宜结合目标 \(n\) 与负载率选取 \(K\)\cite{bender2022otsh,bender2024sosa}。
+\(n=10^3\) 时 \(K=16\) 插入最快（22.6\,$\mu$s），但踢出最多（112 次）；\(K\ge 64\) 时踢出降至约 60 次，增删延迟略升，体现小 \(n\) 下 facility 过细反而增加路由与维护开销。\(n=10^4\) 三档 \(K\) 下查询均在 2.6--2.8\,$\mu$s，踢出随 \(K\) 增大变化不大（813--963），说明中等规模下 \(K\) 对均匀负载的边际影响有限。\(n=10^5\) 时 \(K=4096\) 删除延迟（127.1\,$\mu$s）明显低于 \(K=256/1024\)（504--518\,$\mu$s），与大规模重构主要落在较小 \(K\) 档、大 facility 缓解局部冲突一致；\(K=1024\) 插入异常偏高（185.2\,$\mu$s）可能与 facility 数与 cubby 布局的组合有关，部署时宜结合目标 \(n\) 与负载率选取 \(K\)\cite{bender2022otsh,bender2024sosa}。
 
 \section{k-kick 深度 \texorpdfstring{$k$}{k} 实验}
 
-对 \(k\in\{3,4,5\}\) 在各规模下执行相同高负载混合增删 workload：\(n=10^3\) 取 \(K=64\)，\(n=10^4\) 取 \(K=256\)，\(n=10^5\) 取 \(K=4096\)。表~\ref{tab:exp-k-1e3}--\ref{tab:exp-k-1e5} 给出完整结果；图~\ref{fig:exp-k-bpk} 汇总三档规模下 bits/key 随 \(k\) 的变化。
+对 \(k\in\{3,4,5\}\) 在各规模下执行相同高负载混合增删负载：\(n=10^3\) 取 \(K=64\)，\(n=10^4\) 取 \(K=256\)，\(n=10^5\) 取 \(K=4096\)。表~\ref{tab:exp-k-1e3}--\ref{tab:exp-k-1e5} 给出完整结果；图~\ref{fig:exp-k-bpk} 汇总三档规模下每键位数随 \(k\) 的变化。
 
 \begin{table}[htbp]
   \centering
@@ -161,7 +159,7 @@
   \small
   \begin{tabular}{lrrrr}
     \toprule
-    $k$ & ins ($\mu$s) & qry ($\mu$s) & del ($\mu$s) & 总踢出 \\
+    $k$ & 插入 ($\mu$s) & 查询 ($\mu$s) & 删除 ($\mu$s) & 总踢出 \\
     \midrule
     3 & 71.2 & 2.1 & 85.8 & 61  \\
     4 & 73.0 & 2.1 & 88.7 & 104 \\
@@ -177,7 +175,7 @@
   \small
   \begin{tabular}{lrrrr}
     \toprule
-    $k$ & ins ($\mu$s) & qry ($\mu$s) & del ($\mu$s) & 总踢出 \\
+    $k$ & 插入 ($\mu$s) & 查询 ($\mu$s) & 删除 ($\mu$s) & 总踢出 \\
     \midrule
     3 & 54.5 & 2.7 & 72.6 & 265  \\
     4 & 55.3 & 2.6 & 72.6 & 900  \\
@@ -193,7 +191,7 @@
   \small
   \begin{tabular}{lrrrr}
     \toprule
-    $k$ & ins ($\mu$s) & qry ($\mu$s) & del ($\mu$s) & 总踢出 \\
+    $k$ & 插入 ($\mu$s) & 查询 ($\mu$s) & 删除 ($\mu$s) & 总踢出 \\
     \midrule
     3 & 60.3 & 3.1 & 2229.4 & 2772  \\
     4 & 62.6 & 3.2 & 2003.9 & 8707  \\
@@ -212,7 +210,7 @@
       xmin=2.5, xmax=5.5,
       xtick={3,4,5},
       xlabel={k-kick 深度 $k$},
-      ylabel={bits/key},
+      ylabel={每键位数},
       legend style={font=\small},
       legend pos=north east,
       grid=major,
@@ -227,29 +225,29 @@
     \addlegendentry{$n=10^5$}
     \end{axis}
   \end{tikzpicture}
-  \caption{k-kick 深度 $k$ 实验中 bits/key}
+  \caption{k-kick 深度 $k$ 实验中每键位数}
   \label{fig:exp-k-bpk}
 \end{figure}
 
-\noindent insert\_moved\_max 与 delete\_moved\_max 各档均不超过 \(k\)。
+\noindent 各档单次插入和删除过程中的最大搬移次数均不超过 \(k\)。
 
-三档规模下累计踢出均随 \(k\) 增大而上升：\(n=10^3\) 由 61 增至 194，\(n=10^4\) 由 265 增至 1587，\(n=10^5\) 由 2772 增至 14986\cite{bender2022otsh,pagh2004cuckoo}。查询延迟在各规模均不超过 3.3\,$\mu$s，kick 深度主要作用于增删路径。\(n=10^5\) 删除延迟达毫秒级，且 \(k=5\) 时（1734.3\,$\mu$s）低于 \(k=3/4\)，与大规模 rebuild 叠加、较深 kick 链在特定负载下分摊搬移的实测表现一致；中小规模下增删延迟随 \(k\) 变化相对平缓\cite{bender2022otsh,bender2024sosa}。图~\ref{fig:exp-k-bpk},表明，随着 k-kick 树深度的增加，每键占用的内存呈现下降趋势，这与论文核心观点相符。
+三档规模下累计踢出均随 \(k\) 增大而上升：\(n=10^3\) 由 61 增至 194，\(n=10^4\) 由 265 增至 1587，\(n=10^5\) 由 2772 增至 14986\cite{bender2022otsh,pagh2004cuckoo}。查询延迟在各规模均不超过 3.3\,$\mu$s，说明踢出深度主要影响增删路径。\(n=10^5\) 删除延迟达毫秒级，且 \(k=5\) 时（1734.3\,$\mu$s）低于 \(k=3/4\)，这一结果与大规模重构叠加、较深踢出链在该负载下分摊部分搬移有关；中小规模下增删延迟随 \(k\) 变化相对平缓\cite{bender2022otsh,bender2024sosa}。图~\ref{fig:exp-k-bpk} 中每键位数随 \(k\) 增大而下降，可作为 \(k\) 参数影响空间开销的一组实测证据。
 
-\section{多层级 Cubby 动态重构实验}
+\section{多层级 cubby 动态重构实验}
 
-固定 \(k=4\)，在 \(n\in\{10^3,10^4,10^5\}\) 下分别取 \(K=64\)、\(256\)、\(4096\)，按表~\ref{tab:exp-tier-1e3}--\ref{tab:exp-tier-1e5} 四种 workload 执行操作序列，统计 rebuild 次数与单次重构平均耗时。
+固定 \(k=4\)，在 \(n\in\{10^3,10^4,10^5\}\) 下分别取 \(K=64\)、\(256\)、\(4096\)，按表~\ref{tab:exp-tier-1e3}--\ref{tab:exp-tier-1e5} 四种负载执行操作序列，统计重构次数与单次重构平均耗时。
 
 \begin{table}[htbp]
   \centering
-  \caption{多层级 Cubby 动态重构（\(n=10^3\)，\(K=64\)）}
+  \caption{多层级 cubby 动态重构（\(n=10^3\)，\(K=64\)）}
   \label{tab:exp-tier-1e3}
   \small
   \begin{tabular}{lrrr}
     \toprule
-    Workload      & rebuild\_down & rebuild\_up & 平均重构耗时 (ms) \\
+    负载      & 向下拆分 & 向上合并 & 平均重构耗时 (ms) \\
     \midrule
-    Insert-only   & 1   & 31  & 3.72 \\
-    Delete-only   & 28  & 0   & 6.24 \\
+    纯插入   & 1   & 31  & 3.72 \\
+    纯删除   & 28  & 0   & 6.24 \\
     80/20 混合    & 0   & 24  & 3.71 \\
     50/50 混合    & 6   & 25  & 3.82 \\
     \bottomrule
@@ -258,15 +256,15 @@
 
 \begin{table}[htbp]
   \centering
-  \caption{多层级 Cubby 动态重构（\(n=10^4\)，\(K=256\)）}
+  \caption{多层级 cubby 动态重构（\(n=10^4\)，\(K=256\)）}
   \label{tab:exp-tier-fixed}
   \small
   \begin{tabular}{lrrr}
     \toprule
-    Workload      & rebuild\_down & rebuild\_up & 平均重构耗时 (ms) \\
+    负载      & 向下拆分 & 向上合并 & 平均重构耗时 (ms) \\
     \midrule
-    Insert-only   & 0   & 384 & 3.47 \\
-    Delete-only   & 384 & 2   & 6.10 \\
+    纯插入   & 0   & 384 & 3.47 \\
+    纯删除   & 384 & 2   & 6.10 \\
     80/20 混合    & 8   & 355 & 3.32 \\
     50/50 混合    & 68  & 377 & 3.35 \\
     \bottomrule
@@ -275,23 +273,25 @@
 
 \begin{table}[htbp]
   \centering
-  \caption{多层级 Cubby 动态重构（\(n=10^5\)，\(K=4096\)）}
+  \caption{多层级 cubby 动态重构（\(n=10^5\)，\(K=4096\)）}
   \label{tab:exp-tier-1e5}
   \small
   \begin{tabular}{lrrr}
     \toprule
-    Workload      & rebuild\_down & rebuild\_up & 平均重构耗时 (ms) \\
+    负载      & 向下拆分 & 向上合并 & 平均重构耗时 (ms) \\
     \midrule
-    Insert-only   & 0    & 3591 & 5.64 \\
-    Delete-only   & 4211 & 621  & 9.76 \\
+    纯插入   & 0    & 3591 & 5.64 \\
+    纯删除   & 4211 & 621  & 9.76 \\
     80/20 混合    & 177  & 3588 & 5.52 \\
     50/50 混合    & 375  & 3504 & 5.13 \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-三档规模下规律一致：纯插入以 rebuild\_up 为主（\(n=10^3\) 为 31 次，\(n=10^5\) 为 3591 次），纯删除以 rebuild\_down 为主（28--4211 次），对应 Cubby 随元素增减而向上合并或向下拆分\cite{bender2024iceberg,pandey2023iceberght}。80/20 混合负载在各规模均以 rebuild\_up 为主；50/50 混合时两方向均显著（如 \(n=10^4\) 为 68/377，\(n=10^5\) 为 375/3504），删除比例升高使 rebuild\_down 占比上升。平均重构耗时由 3.3--6.2\,ms（\(n\le 10^4\)）增至 5.1--9.8\,ms（\(n=10^5\)），仍远低于大规模混合 workload 中单次删除的均摊延迟。
+三档规模下规律一致：纯插入以向上合并为主（\(n=10^3\) 为 31 次，\(n=10^5\) 为 3591 次），纯删除以向下拆分为主（28--4211 次），对应小桶随元素增减而向上合并或向下拆分\cite{bender2024iceberg,pandey2023iceberght}。80/20 混合负载在各规模均以向上合并为主；50/50 混合时两方向均显著（如 \(n=10^4\) 为 68/377，\(n=10^5\) 为 375/3504），删除比例升高使向下拆分占比上升。平均重构耗时由 3.3--6.2\,ms（\(n\le 10^4\)）增至 5.1--9.8\,ms（\(n=10^5\)），仍低于大规模混合负载中单次删除的均摊延迟。
 
 \section{本章小结}
 
-本章在 \(n\)、Facility 规模 \(K\)、k-kick 深度 \(k\) 及 Cubby 动态重构四组设定下，于 \(n\in\{10^3,10^4,10^5\}\) 完成测量。表~\ref{tab:exp-n-fixed} 与图~\ref{fig:exp-n-latency} 显示查询延迟由 2.2\,$\mu$s 升至 5.1\,$\mu$s，\(n=10^5\) 删除延迟达 2051.9\,$\mu$s；\(K\)、\(k\) 与 Cubby 三组实验在表~\ref{tab:exp-K-1e3}--\ref{tab:exp-tier-1e5} 中给出三档规模对照，insert\_moved\_max 各档均不超过 \(k\)，纯插入/纯删除 workload 分别主导 rebuild\_up 与 rebuild\_down。上述结果与 Local Query Router 常数步查询设计及 k-kick 交换上界在实测中可对照。
+本章在 \(n\)、facility 规模 \(K\)、k-kick 深度 \(k\) 及 cubby 动态重构四组设定下，于 \(n\in\{10^3,10^4,10^5\}\) 完成测量。表~\ref{tab:exp-n-fixed} 显示，随 \(n\) 增大查询延迟由 2.1--2.3\,$\mu$s 升至 4.5--8.6\,$\mu$s；\(n=10^5\) 时删除延迟为 498--564\,$\mu$s，主要受尾部回填和层级状态维护影响。
+
+\(K\)、\(k\) 与 cubby 动态重构实验在表~\ref{tab:exp-K-1e3}--\ref{tab:exp-tier-1e5} 中给出三档规模对照。各档单次搬移次数均不超过 \(k\)，纯插入和纯删除负载分别主要触发向上合并与向下拆分。整体来看，基础多层级结构中的局部路由、有限踢出和多层级重构均按实现规则运行；删除路径的额外维护成本也为下一章讨论冷热分层改造提供了对照基础。

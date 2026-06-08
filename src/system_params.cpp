@@ -23,6 +23,16 @@ namespace otsh
             return x + 1;
         }
 
+        uint64_t floor_pow2(uint64_t x)
+        {
+            if (x <= 1)
+                return 1;
+            uint64_t p2 = 1;
+            while ((p2 << 1) <= x)
+                p2 <<= 1;
+            return p2;
+        }
+
         double iter_log2(double x, int t)
         {
             x = std::max(2.0, x);
@@ -42,10 +52,7 @@ namespace otsh
             uint64_t K = static_cast<uint64_t>(std::ceil(Kd));
             K = std::max<uint64_t>(64, std::min<uint64_t>(4096, K));
             K = std::min(K, N);
-            uint64_t p2 = 1;
-            while ((p2 << 1) <= K)
-                p2 <<= 1;
-            return std::max<uint64_t>(1, p2);
+            return std::max<uint64_t>(1, floor_pow2(K));
         }
 
         int fanout_of(uint64_t N, int override_fanout)
@@ -87,7 +94,7 @@ namespace otsh
         d.k_polylog_exp = std::clamp(p.k_polylog_exp, 2, 4);
         if (p.K_override > 0)
         {
-            d.K = p.K_override;
+            d.K = floor_pow2(p.K_override);
             d.K = std::min(d.K, d.N);
         }
         else
@@ -229,10 +236,16 @@ namespace otsh
             make_preset("n_5k", 5'000, 4, 3, 2, 2, 0.90),
             // §6.1 / Ch4 基准：n=10^6, K=log^3 n≈4096, k=4
             make_preset("baseline", 1'000'000, 4, 3, 2, 3, 0.90),
-            // n 规模扫描（Ch4 §4.1：10^3…10^5）
-            make_preset("n_1e3", 1'000, 4, 3, 2, 2, 0.90),
-            make_preset("n_1e4", 10'000, 4, 3, 2, 2, 0.90),
-            make_preset("n_1e5", 100'000, 4, 3, 2, 3, 0.90),
+            // 表 1：n=10^3…10^5 × K∈{64,128,256}，k=3
+            make_preset("n_1e3_K64", 1'000, 3, 3, 2, 2, 0.90, 64),
+            make_preset("n_1e3_K128", 1'000, 3, 3, 2, 2, 0.90, 128),
+            make_preset("n_1e3_K256", 1'000, 3, 3, 2, 2, 0.90, 256),
+            make_preset("n_1e4_K64", 10'000, 3, 3, 2, 2, 0.90, 64),
+            make_preset("n_1e4_K128", 10'000, 3, 3, 2, 2, 0.90, 128),
+            make_preset("n_1e4_K256", 10'000, 3, 3, 2, 2, 0.90, 256),
+            make_preset("n_1e5_K64", 100'000, 3, 3, 2, 3, 0.90, 64),
+            make_preset("n_1e5_K128", 100'000, 3, 3, 2, 3, 0.90, 128),
+            make_preset("n_1e5_K256", 100'000, 3, 3, 2, 3, 0.90, 256),
             // 论文原始量级（保留备查，不在默认分组）
             make_preset("n_1e2", 100, 4, 3, 2, 2, 0.90),
             make_preset("n_1e6", 1'000'000, 4, 3, 2, 3, 0.90),
@@ -291,8 +304,11 @@ namespace otsh
                     preset_by_name("n_1k"), preset_by_name("n_2k"),
                     preset_by_name("n_5k")};
         case ExperimentGroup::NScale:
-            return {preset_by_name("n_1e3"), preset_by_name("n_1e4"),
-                    preset_by_name("n_1e5")};
+            return {preset_by_name("n_1e3_K64"), preset_by_name("n_1e3_K128"),
+                    preset_by_name("n_1e3_K256"), preset_by_name("n_1e4_K64"),
+                    preset_by_name("n_1e4_K128"), preset_by_name("n_1e4_K256"),
+                    preset_by_name("n_1e5_K64"), preset_by_name("n_1e5_K128"),
+                    preset_by_name("n_1e5_K256")};
         case ExperimentGroup::KFixed:
             switch (scale)
             {

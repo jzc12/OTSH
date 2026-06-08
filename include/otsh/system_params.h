@@ -51,7 +51,7 @@ namespace otsh
     enum class ExperimentGroup
     {
         All,        // n + Kfixed + k + tier
-        NScale,     // 表1：n ∈ {10^3,10^4,10^5}，K=log^3 n，k=4
+        NScale,     // 表1：n∈{10^3,10^4,10^5}×K∈{64,128,256}，k=3
         NMicro,     // 渐进验证：n ∈ {200…5000}，全量填充，runs=1
         KFixed,     // 表2：K 三档，n 由 Ch4Scale 决定
         KKickDepth, // 表3：k ∈ {3,4,5}，n/K 由 Ch4Scale 决定

@@ -26,7 +26,7 @@
     % 作者英文姓名
     % 一般使用拼音
     %
-    keywords = {k-kick 树;tail cubby;冷热分层存储;数据库集成},
+    keywords = {k-kick 树, tail cubby, 冷热分层存储, 数据库集成},
     % 中文关键词列表
     % 使用英文半角逗号(,)分隔
     %

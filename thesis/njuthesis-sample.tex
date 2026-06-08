@@ -42,7 +42,7 @@
     %
     %   单双面模式，默认为适合印刷的双面模式
     oneside,                % 单面模式，无空白页
-    % twoside,                % 双面模式，每一章从奇数页开始
+    twoside,                % 双面模式，每一章从奇数页开始
     %
     %   字体设置，不填写则自动调用系统预装字体，详见手册
     % fontset = win|mac|macoffice|fandol|none,
@@ -60,7 +60,59 @@
 % \usepackage[version=4]{mhchem} % 绘制分子式
 \usepackage{listings} % 展示代码
 \usepackage{tikz}
-\usetikzlibrary{positioning,arrows.meta}
+\usetikzlibrary{positioning,arrows.meta,shapes.geometric,shapes.symbols}
+\tikzset{
+    >=Latex,
+    block/.style={
+        rectangle,
+        rounded corners,
+        draw,
+        align=center,
+        minimum width=42mm,
+        minimum height=8mm,
+        font=\small
+    },
+    decision/.style={
+        diamond,
+        draw,
+        align=center,
+        aspect=2.2,
+        inner sep=1pt,
+        font=\small
+    },
+    io/.style={
+        trapezium,
+        trapezium left angle=75,
+        trapezium right angle=105,
+        draw,
+        align=center,
+        minimum width=36mm,
+        minimum height=8mm,
+        font=\small
+    },
+    datastore/.style={
+        cylinder,
+        shape border rotate=90,
+        aspect=0.25,
+        draw,
+        align=center,
+        minimum height=11mm,
+        minimum width=20mm,
+        font=\small
+    },
+    note/.style={
+        rectangle,
+        dashed,
+        draw,
+        align=left,
+        inner sep=4pt,
+        font=\footnotesize
+    },
+    line/.style={
+        draw,
+        -{Latex[length=2mm]}
+    }
+}
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.18}
 \usepackage{algorithm} % 浮动体
@@ -68,10 +120,19 @@
 \floatname{algorithm}{算法}
 \renewcommand{\algorithmicrequire}{输入：}
 \renewcommand{\algorithmicensure}{输出：}
+\makeatletter
+\@addtoreset{equation}{chapter}
+\@addtoreset{figure}{chapter}
+\@addtoreset{table}{chapter}
+\@addtoreset{algorithm}{chapter}
+\makeatother
+\renewcommand{\theequation}{\thechapter.\arabic{equation}}
+\renewcommand{\thefigure}{\thechapter.\arabic{figure}}
+\renewcommand{\thetable}{\thechapter.\arabic{table}}
+\renewcommand{\thealgorithm}{\thechapter.\arabic{algorithm}}
 
 % 在导言区随意定制所需命令
 % \DeclareMathOperator{\spn}{span}
-% \NewDocumentCommand\mathbi{m}{\textbf{\em #1}}
 
 % 开始编写论文
 \begin{document}
@@ -90,13 +151,13 @@
 
 \begin{abstract}
 
-k-kick 树相关理论表明，在插入和删除操作允许进行少量元素迁移的条件下，可以在保证常数时间查询的同时，获得更优的时间与空间权衡。本文在原有 k-kick 紧凑哈希表简化复现的基础上，进一步设计并实现了一种结合 hot tail cubby 与 SQLite 的冷热分层存储方案。该方案保留 Facility 分区、tail cubby 和局部路由等核心思想，将 tail cubby 改造为内存热缓存，用于存储近期插入的数据以及具有访问局部性的数据；同时将冷数据下沉至 SQLite 数据库中，以获得持久化能力。为验证该设计的实际效果，本文实现了三种对照方案，分别为原始多层级 cubby 哈希结构、纯 SQLite 存储结构，以及 hot tail cubby + SQLite 混合结构，并在相同的工作负载和评价指标下，从插入延迟、查询延迟、删除延迟和平均每键空间占用等方面进行实验比较。实验结果表明， hot tail cubby + SQLite 混合方案在保留数据库持久化能力的同时，能够利用内存热缓存降低热数据的访问成本，各项测试指标均优于纯 SQLite 方案。与原始多层级 cubby 结构相比，该方案的平均每键空间占用增加，但插入和删除延迟有所降低。
+k-kick 哈希相关理论表明，在插入和删除允许有限次元素搬移时，紧凑哈希表可以降低每键额外空间开销，并保持查询的常数时间复杂度。本文先实现该结构的简化原型，再在其上加入由热tail cubby和 SQLite 组成的冷热分层存储方案。基础原型保留 facility 分区、tail cubby、Local Query Router 和商压缩组件。该实现用于验证有限踢出、局部路由和键恢复能否在同一系统中配合运行。多层级 cubby 需要维护合并、拆分和删除回填状态，直接持久化每一层结构并不方便。因此，冷热分层方案将近期插入的数据暂存在内存tail cubby；tail cubby写满后，再以批量事务写入 SQLite，冷数据按键值记录管理。实验设置多层级内存结构、纯 SQLite 结构和冷热分层结构三类对照。各组使用相同键集合、访问序列和统计口径，比较操作延迟与平均每键空间占用。结果显示，在写后读和近期访问负载下，内存热层缩短了部分查询路径；删除近期键时，也减少了多层级回填。与纯 SQLite 相比，冷热分层方案的查询延迟、删除延迟和按本文口径统计的每键空间占用更低，但部分规模下写入延迟并不占优。
 
 \end{abstract}
 
 \begin{abstract*}
 
-The theory of k-kick tree shows that, when a small amount of element migration is allowed during insertion and deletion, a better trade-off between time and space can be achieved while preserving constant-time query performance. Based on a simplified reproduction of the original k-kick compact hash table, this thesis further designs and implements a hot-cold hierarchical storage scheme that combines a hot tail cubby with SQLite. The proposed scheme preserves the core ideas of Facility partitioning, tail cubby storage, and local routing. Specifically, the tail cubby is transformed into an in-memory hot cache, which is used to store recently inserted data and data with access locality. Meanwhile, cold data is moved into an SQLite database to provide persistence. To evaluate the effectiveness of the proposed design, this thesis implements three comparative schemes: the original multi-tier cubby hash structure, a pure SQLite storage structure, and the hot tail cubby + SQLite hybrid structure. Under the same workloads and evaluation metrics, these schemes are compared in terms of insertion latency, query latency, deletion latency, and average space usage per key. The experimental results show that the proposed hot tail cubby + SQLite hybrid scheme preserves the persistence capability of the database while reducing the access cost of hot data through the in-memory hot cache, and all tested metrics are better than those of the pure SQLite scheme. Compared with the original multi-tier cubby structure, the proposed scheme has higher average space usage per key, but it achieves lower insertion and deletion latencies.
+The theory of k-kick hashing shows that, when insertion and deletion allow a bounded number of element moves, a compact hash table can reduce auxiliary space per key while keeping constant-time queries. This thesis first implements a simplified prototype of that structure, then adds a hot-cold storage scheme built from an in-memory tail cubby and SQLite. The base prototype keeps facility partitioning, the tail cubby, the Local Query Router, and quotient compression. These components are used to test whether bounded kicking, local routing, and key recovery can work together in one system. Persisting the original multi-tier cubby structure directly is awkward, because merging, splitting, and deletion backfilling all depend on current tier state. The hot-cold design therefore keeps recently inserted keys in the in-memory tail cubby; when the tail becomes full, it flushes valid keys to SQLite in a batch transaction, and cold keys are managed as database records. The experiments compare the multi-tier in-memory structure, a pure SQLite structure, and the hot-cold tiered structure under the same key sets, access sequences, and metric definitions. Under write-after-read and recent-access workloads, the memory hot layer shortens part of the query path, and deleting recent keys triggers less multi-tier backfilling. Compared with pure SQLite, the hot-cold scheme has lower query latency, deletion latency, and per-key space usage under the measurement method used here, but its insertion latency is not lower at all scales.
 
 \end{abstract*}
 
@@ -112,12 +173,13 @@ The theory of k-kick tree shows that, when a small amount of element migration i
 %---------------------------------------------------------------------
 \mainmatter
 
-% 建议将论文内容拆分为多个文件，按章节组织在 chapters/ 下
+% 建议将论文内容拆分为多个文件，按章节组织在 chapters/ 下 
 \include{chapters/01_introduction}
 \include{chapters/02_background}
 \include{chapters/03_system}
 \include{chapters/04_experiments}
-\include{chapters/05_conclusion}
+\include{chapters/05_hotcold_experiments}
+\include{chapters/06_conclusion}
 
 %---------------------------------------------------------------------
 %	参考文献
